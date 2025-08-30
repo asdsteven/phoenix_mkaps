@@ -11,6 +11,7 @@ kill_signal = 'SIGTERM'
 
 [env]
   DATABASE_PATH = '/mnt/name/name.db'
+  UPLOADS_PATH = '/mnt/name/uploads'
   PHX_HOST = 'mkaps.fly.dev'
   PORT = '8080'
 

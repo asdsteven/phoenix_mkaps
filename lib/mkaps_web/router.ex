@@ -17,7 +17,9 @@ defmodule MkapsWeb.Router do
   scope "/", MkapsWeb do
     pipe_through :browser
 
-    get "/", PageController, :home
+    # get "/", PageController, :home
+    get "/file.pdf", FileController, :file
+    live "/", MkapsLive
   end
 
   # Other scopes may use custom stacks.
