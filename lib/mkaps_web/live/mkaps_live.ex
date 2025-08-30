@@ -2,7 +2,15 @@ defmodule MkapsWeb.MkapsLive do
   use MkapsWeb, :live_view
 
   def mount(_params, _session, socket) do
-    {:ok, allow_upload(socket, :any_file, accept: :any, max_file_size: 1_000_000_000)}
+    {:ok, socket
+    |> assign(:progress, nil)
+    |> allow_upload(:any_file,
+     accept: :any,
+     max_file_size: 1_000_000_000,
+     progress: fn :any_file, entry, socket ->
+       {:noreply, assign(socket, :progress, entry.progress)}
+     end
+     )}
   end
 
   def handle_event("validate", _params, socket) do
