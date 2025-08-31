@@ -19,6 +19,7 @@ defmodule MkapsWeb.Router do
 
     # get "/", PageController, :home
     get "/file.pdf", FileController, :file
+    live "/file", FileLive
     live "/", MkapsLive
   end
 
