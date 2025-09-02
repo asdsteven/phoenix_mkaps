@@ -14,6 +14,7 @@ Hooks.Draggable = {
       el.style.cursor = "grabbing"
       const allZ = Array.from(document.querySelectorAll('.mkaps-draggable')).map(e => e.style.zIndex);
       el.style.zIndex = Math.max(...allZ) + 1
+      e.preventDefault()
     }
 
     const doDrag = (e) => {
@@ -45,6 +46,18 @@ Hooks.Draggable = {
 
     window.addEventListener("mouseup", stopDrag)
     window.addEventListener("touchend", stopDrag)
+  }
+}
+
+Hooks.CopyOnClick = {
+  mounted() {
+    this.el.addEventListener("click", () => {
+      const text = this.el.dataset.copyText
+      navigator.clipboard.writeText(text).then(() => {
+        this.el.classList.add("text-success")
+        setTimeout(() => this.el.classList.remove("text-success"), 1000)
+      })
+    })
   }
 }
 

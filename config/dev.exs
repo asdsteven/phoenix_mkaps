@@ -61,7 +61,7 @@ config :mkaps, MkapsWeb.Endpoint,
     ]
   ]
 
-config :mkaps, MkapsWeb.MkapsLive,
+config :mkaps, MkapsWeb.FileLive,
   uploads_path: "uploads"
 
 # Enable dev routes for dashboard and mailbox

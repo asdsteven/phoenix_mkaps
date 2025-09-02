@@ -1,4 +1,4 @@
-<%= if @list_lesson do %>
+<%= if @page == :list_lesson do %>
     <%= for lesson <- @list_lesson do %>
         <.form for={%{}} phx-submit="save_lesson" class="m-2">
             <input type="hidden" name="lesson" value={lesson.id}>
@@ -17,64 +17,77 @@
             <button type="submit" class="join-item btn btn-primary">Create</button>
         </div>
     </.form>
-<% else %>
-    <%= if @edit_lesson do %>
-        <div class="join m-2">
-            <button class="join-item btn btn-accent" phx-click="play_lesson" phx-value-lesson={@edit_lesson.id}>Play</button>
-            <button class="join-item btn btn-primary" phx-click="list_lesson">List lesson</button>
-            <button class="join-item btn btn-secondary" phx-click="reset_positions">Reset positions</button>
-            <button class="join-item btn btn-info" phx-click="upload_images">Upload images</button>
-        </div>
-        <%= for slide <- @edit_lesson.slides do %>
-            <.form for={%{}} phx-submit="save_slide" class="m-2">
-                <input type="hidden" name="slide" value={slide.id}>
-                <textarea placeholder="Sentences" class="textarea" name="sentences"><%= slide.sentences %></textarea>
-                <textarea placeholder="Images" class="textarea" name="images"><%= slide.images %></textarea>
-                <div class="join">
-                    <button type="submit" class="join-item btn btn-primary">Save</button>
-                    <button type="button" class="join-item btn btn-secondary" phx-click="move_slide" phx-value-slide={slide.id}>Move</button>
-                </div>
-            </.form>
-        <% end %>
-        <.form for={%{}}phx-submit="create_slide" class="m-2">
-            <textarea placeholder="Sentences" class="textarea" name="sentences"></textarea>
-            <textarea placeholder="Images" class="textarea" name="images"></textarea>
-            <button type="submit" class="btn btn-primary">Create</button>
+<% end %>
+
+<%= if @page == :edit_lesson do %>
+    <div class="join m-2">
+        <button class="join-item btn btn-accent" phx-click="play_lesson" phx-value-lesson={@edit_lesson.id}>Play</button>
+        <button class="join-item btn btn-primary" phx-click="list_lesson">List lesson</button>
+        <button class="join-item btn btn-secondary" phx-click="reset_positions">Reset positions</button>
+    </div>
+    <form id="upload-form" phx-submit="save" phx-change="validate" class="m-2">
+        <.live_file_input upload={@uploads.image} class="file-input file-input-primary" />
+        <button type="submit">Upload</button>
+        <div>{@progress}</div>
+    </form>
+    <%= for slide <- @edit_lesson.slides do %>
+        <.form for={%{}} phx-submit="save_slide" class="m-2">
+            <input type="hidden" name="slide" value={slide.id}>
+            <textarea placeholder="Sentences" class="textarea" name="sentences"><%= slide.sentences %></textarea>
+            <textarea placeholder="Images" class="textarea" name="images"><%= slide.images %></textarea>
+            <div class="join">
+                <button type="submit" class="join-item btn btn-primary">Save</button>
+                <button type="button" class="join-item btn btn-secondary" phx-click="move_slide" phx-value-slide={slide.id}>Move</button>
+            </div>
         </.form>
-    <% else %>
-        <div class="w-[1280px] h-[720px] bg-[url(/images/background1.jpg)] bg-cover bg-center relative select-none overflow-hidden">
-            <div class="absolute inset-0 bg-zinc-800/90"></div>
-            <%= if @play_lesson && length(@play_lesson.slides) > 0 && Enum.at(@play_lesson.slides, @play_index).sentences do %>
-                <div class="flex justify-center my-4" :for={{sentence, i} <- Enum.with_index(String.split(Enum.at(@play_lesson.slides, @play_index).sentences, "\n"))}>
-                    <span class="relative px-4 py-2 text-5xl rounded-lg bg-stone-100 shadow-sm/100 text-black kai mkaps-draggable" phx-hook="Draggable" id={"sentence-#{i}"}
-                          style={Map.get(Enum.at(@play_lesson.slides, @play_index).sentence_positions || %{}, "sentence-#{i}", "left:0px;top:0px;z-index:0")}>
-                        <%= sentence %>
-                    </span>
-                </div>
-            <% end %>
-            <%= if @play_lesson && length(@play_lesson.slides) > 0 && Enum.at(@play_lesson.slides, @play_index).images do %>
-                <div class="flex justify-center my-4" :for={{image, i} <- Enum.with_index(String.split(Enum.at(@play_lesson.slides, @play_index).images, "\n"))}>
-                    <img class="relative mkaps-draggable" src={image} phx-hook="Draggable" id={"image-#{i}"}
-                          style={Map.get(Enum.at(@play_lesson.slides, @play_index).sentence_positions || %{}, "image-#{i}", "left:0px;top:0px;z-index:0")}>
-                </div>
-            <% end %>
-            <div class="absolute bottom-0 w-full flex justify-between">
-                <div class="flex-none join">
-                    <button class="join-item btn btn-outline btn-primary kai" phx-click="edit_lesson" phx-value-lesson={@play_lesson.id}>編輯</button>
-                </div>
-                <div class="flex-none join">
-                    <button :for={{_slide, i} <- Enum.with_index(@play_lesson.slides)}
-                            phx-click="set_slide"
-                            phx-value-slide={i}
-                            class={"join-item btn btn-sm btn-outline #{if i == @play_index, do: "btn-primary"}"}>
-                        <%= i+1 %>
-                    </button>
-                </div>
-                <div class="flex-none">
-                    <button class="btn btn-primary btn-circle btn-outline" phx-click="prev_slide">&lt;</button>
-                    <button class="btn btn-primary btn-circle btn-outline" phx-click="next_slide">&gt;</button>
-                </div>
+    <% end %>
+    <.form for={%{}}phx-submit="create_slide" class="m-2">
+        <textarea placeholder="Sentences" class="textarea" name="sentences"></textarea>
+        <textarea placeholder="Images" class="textarea" name="images"></textarea>
+        <button type="submit" class="btn btn-primary">Create</button>
+    </.form>
+    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+         <div :for={image <- @images} class="flex flex-col items-center space-y-2">
+            <span id={"image-#{image}"} phx-hook="CopyOnClick" data-copy-text={image}><%= image %></span>
+            <img src={"/uploads/#{image}"} class="w-full max-w-xs max-h-64 object-contain">
+        </div>
+    </div>
+<% end %>
+
+<%= if @page == :play_lesson do %>
+    <div class="w-[1280px] h-[720px] bg-[url(/images/background1.jpg)] bg-cover bg-center relative select-none overflow-hidden">
+        <div class="absolute inset-0 bg-zinc-800/90"></div>
+        <%= if @play_lesson && length(@play_lesson.slides) > 0 && Enum.at(@play_lesson.slides, @play_index).sentences do %>
+            <div class="flex justify-center my-4" :for={{sentence, i} <- Enum.with_index(String.split(Enum.at(@play_lesson.slides, @play_index).sentences, "\n"))}>
+                <span class="relative px-4 py-2 text-5xl rounded-lg bg-stone-100 shadow-sm/100 text-black kai mkaps-draggable" phx-hook="Draggable" id={"sentence-#{i}"}
+                      style={Map.get(Enum.at(@play_lesson.slides, @play_index).sentence_positions || %{}, "sentence-#{i}", "left:0px;top:0px;z-index:0")}>
+                    <%= sentence %>
+                </span>
+            </div>
+        <% end %>
+        <%= if @play_lesson && length(@play_lesson.slides) > 0 && Enum.at(@play_lesson.slides, @play_index).images do %>
+            <div class="flex justify-center my-4" :for={{image, i} <- Enum.with_index(String.split(Enum.at(@play_lesson.slides, @play_index).images, "\n"))}>
+                <img class="relative mkaps-draggable w-auto h-[240px] shadow-sm/100" src={"/uploads/#{image}"} phx-hook="Draggable" id={"image-#{i}"}
+                      style={Map.get(Enum.at(@play_lesson.slides, @play_index).sentence_positions || %{}, "image-#{i}", "left:0px;top:0px;z-index:0")}>
+            </div>
+        <% end %>
+        <div class="absolute bottom-0 w-full flex justify-between">
+            <div class="flex-none join">
+                <button class="join-item btn btn-outline btn-primary kai" phx-click="edit_lesson" phx-value-lesson={@play_lesson.id}>編輯</button>
+            </div>
+            <div class="flex-none join">
+                <button :for={{_slide, i} <- Enum.with_index(@play_lesson.slides)}
+                        phx-click="set_slide"
+                        phx-value-slide={i}
+                        class={"join-item btn btn-sm btn-outline #{if i == @play_index, do: "btn-primary"}"}>
+                    <%= i+1 %>
+                </button>
+            </div>
+            <div class="flex-none">
+                <button class="btn btn-primary btn-circle btn-outline" phx-click="prev_slide">&lt;</button>
+                <button class="btn btn-primary btn-circle btn-outline" phx-click="next_slide">&gt;</button>
             </div>
         </div>
-    <% end %>
+    </div>
 <% end %>
+

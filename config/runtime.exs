@@ -61,7 +61,7 @@ if config_env() == :prod do
     ],
     secret_key_base: secret_key_base
 
-  config :mkaps, MkapsWeb.MkapsLive,
+  config :mkaps, MkapsWeb.FileLive,
     uploads_path: System.get_env("UPLOADS_PATH") || "uploads"
 
   # ## SSL Support
