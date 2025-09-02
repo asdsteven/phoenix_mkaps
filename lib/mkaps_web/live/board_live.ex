@@ -11,7 +11,7 @@ defmodule MkapsWeb.BoardLive do
   def mount(_params, _session, socket) do
     lesson = Repo.one(from lesson in Lesson, order_by: lesson.id, limit: 1) |> Repo.preload(slides: from(s in Slide, order_by: s.position))
     {:ok, assign(socket, page: :play_lesson, play_lesson: lesson, play_index: 0, play_menu: false)
-    |> assign(font_sizes: @font_sizes, image_sizes: @image_sizes, font_size: 9, image_size: 5)
+    |> assign(font_sizes: @font_sizes, image_sizes: @image_sizes, font_size: 11, image_size: 5)
     |> assign(graphemes: MapSet.new())
     |> allow_upload(:image,
      accept: :any,
@@ -135,7 +135,7 @@ defmodule MkapsWeb.BoardLive do
   end
 
   def handle_event("play-lesson", %{"lesson" => lesson_id}, socket) do
-    if socket.assigns.play_lesson && lesson_id == socket.assigns.play_lesson.id do
+    if socket.assigns.play_lesson && String.to_integer(lesson_id) == socket.assigns.play_lesson.id do
       {:noreply, assign(socket, page: :play_lesson)}
     else
       lesson = Repo.get!(Lesson, String.to_integer(lesson_id)) |> Repo.preload(slides: from(s in Slide, order_by: s.position))
