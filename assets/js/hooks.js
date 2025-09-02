@@ -4,10 +4,11 @@ Hooks.Draggable = {
   mounted() {
     let el = this.el
     let offset = { x: 0, y: 0 }
-    let isDragging = false
+    let isDragging = 0
 
     const startDrag = (e) => {
-      isDragging = true
+      if (isDragging) return
+      isDragging = 1
       const point = e.touches ? e.touches[0] : e
       offset.x = point.clientX - parseInt(el.style.left, 10)
       offset.y = point.clientY - parseInt(el.style.top, 10)
@@ -19,6 +20,7 @@ Hooks.Draggable = {
 
     const doDrag = (e) => {
       if (!isDragging) return
+      isDragging = 2
       const point = e.touches ? e.touches[0] : e
       el.style.left = point.clientX - offset.x + "px"
       el.style.top = point.clientY - offset.y + "px"
@@ -26,7 +28,9 @@ Hooks.Draggable = {
 
     const stopDrag = () => {
       if (!isDragging) return
-      isDragging = false
+      setTimeout(() => {
+        isDragging = 0
+      }, 0);
       el.style.cursor = "grab"
       this.pushEvent("drag", {
         object: el.id,
@@ -46,6 +50,13 @@ Hooks.Draggable = {
 
     window.addEventListener("mouseup", stopDrag)
     window.addEventListener("touchend", stopDrag)
+
+    el.addEventListener("click", (e) => {
+      if (isDragging == 2) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+      }
+    })
   }
 }
 
