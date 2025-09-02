@@ -1,0 +1,66 @@
+<%= if @list_lesson do %>
+    <%= for lesson <- @list_lesson do %>
+        <.form for={%{}} phx-submit="save_lesson">
+            <input type="hidden" name="lesson" value={lesson.id}>
+            <input type="text" class="input" name="name" value={lesson.name}>
+            <button type="submit" class="btn btn-primary">Save</button>
+            <button type="button" class="btn btn-secondary" phx-click="move_lesson" phx-value-lesson={lesson.id}>Move</button>
+            <button type="button" class="btn btn-secondary" phx-click="edit_lesson" phx-value-lesson={lesson.id}>Edit</button>
+            <button type="button" class="btn btn-neutral" phx-click="play_lesson" phx-value-lesson={lesson.id}>Play</button>
+        </.form>
+    <% end %>
+    <.form for={%{}} phx-submit="create_lesson">
+        <input type="text" class="input" name="name" placeholder="Lesson name">
+        <button type="submit" class="btn btn-primary">Create</button>
+    </.form>
+<% else %>
+    <%= if @edit_lesson do %>
+        <button class="btn btn-primary" phx-click="play_lesson" phx-value-lesson={@edit_lesson.id}>Play lesson</button>
+        <button class="btn btn-secondary" phx-click="list_lesson">List lesson</button>
+        <%= for slide <- @edit_lesson.slides do %>
+            <.form for={%{}} phx-submit="save_slide">
+                <input type="hidden" name="slide" value={slide.id}>
+                <textarea placeholder="Sentences" class="textarea" name="sentences"><%= slide.sentences %></textarea>
+                <textarea placeholder="Images" class="textarea" name="images"><%= slide.images %></textarea>
+                <button type="submit" class="btn btn-primary">Save</button>
+                <button type="button" class="btn btn-secondary" phx-click="move_slide" phx-value-slide={slide.id}>Move</button>
+            </.form>
+        <% end %>
+        <.form for={%{}}phx-submit="create_slide">
+            <textarea placeholder="Sentences" class="textarea" name="sentences"></textarea>
+            <textarea placeholder="Images" class="textarea" name="images"></textarea>
+            <button type="submit" class="btn btn-primary">Create</button>
+        </.form>
+    <% else %>
+        <div class="w-[1280px] h-[720px] bg-[url(/images/background1.jpg)] bg-cover bg-center relative select-none overflow-hidden">
+            <div class="absolute inset-0 bg-zinc-800/90"></div>
+            <%= if @play_lesson && length(@play_lesson.slides) > 0 do %>
+                <div class="flex justify-center my-4" :for={{sentence, i} <- Enum.with_index(String.split(Enum.at(@play_lesson.slides, @play_index).sentences, "\n"))}>
+                    <span class="relative px-4 py-2 text-5xl rounded-lg bg-stone-100 text-black kai" phx-hook="Draggable" id={"sentence-#{i}"}
+                          style={Map.get(Enum.at(@play_lesson.slides, @play_index).sentence_positions || %{}, "sentence-#{i}", "left:0px;top:0px")}>
+                        <%= sentence %>
+                    </span>
+                </div>
+            <% end %>
+            <div class="absolute bottom-0 w-full flex justify-between">
+                <div class="flex-none join">
+                    <button class="join-item btn btn-outline btn-primary" phx-click="reset_positions">🧲</button>
+                    <button class="join-item btn btn-outline btn-primary" phx-click="list_lesson">📂</button>
+                    <button class="join-item btn btn-outline btn-primary" phx-click="edit_lesson" phx-value-lesson={@play_lesson.id}>✏️</button>
+                </div>
+                <div class="flex-none join">
+                    <button :for={{_slide, i} <- Enum.with_index(@play_lesson.slides)}
+                            phx-click="set_slide"
+                            phx-value-slide={i}
+                            class={"join-item btn btn-sm btn-outline #{if i == @play_index, do: "btn-primary"}"}>
+                        <%= i+1 %>
+                    </button>
+                </div>
+                <div class="flex-none">
+                    <button class="btn btn-primary btn-circle btn-outline" phx-click="prev_slide">&lt;</button>
+                    <button class="btn btn-primary btn-circle btn-outline" phx-click="next_slide">&gt;</button>
+                </div>
+            </div>
+        </div>
+    <% end %>
+<% end %>

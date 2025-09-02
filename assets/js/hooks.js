@@ -22,9 +22,11 @@ Hooks.Draggable = {
     }
 
     const stopDrag = () => {
+      if (!isDragging) return
       isDragging = false
       el.style.cursor = "grab"
-      this.pushEvent("update_position", {
+      this.pushEvent("drag_sentence", {
+        sentence: el.id,
         x: parseInt(el.style.left, 10),
         y: parseInt(el.style.top, 10)
       })

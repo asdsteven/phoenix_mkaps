@@ -20,7 +20,7 @@ defmodule MkapsWeb.Router do
     # get "/", PageController, :home
     get "/file.pdf", FileController, :file
     live "/file", FileLive
-    live "/", MkapsLive
+    live "/", BoardLive
   end
 
   # Other scopes may use custom stacks.
