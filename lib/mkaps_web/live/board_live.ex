@@ -123,10 +123,9 @@ defmodule MkapsWeb.BoardLive do
     end
   end
 
-  def handle_event("drag_sentence", %{"sentence" => sentence_id, "x" => x, "y" => y}, socket) do
+  def handle_event("drag_sentence", %{"sentence" => sentence_id, "x" => x, "y" => y, "z" => z}, socket) do
     slide = Repo.get!(Slide, Enum.at(socket.assigns.play_lesson.slides, socket.assigns.play_index).id)
-    IO.inspect(Slide.changeset(slide, %{sentence_positions: Map.put(slide.sentence_positions || %{}, sentence_id, "left: #{x}px; top: #{y}px")}), label: "jj")
-    Slide.changeset(slide, %{sentence_positions: Map.put(slide.sentence_positions || %{}, sentence_id, "left: #{x}px; top: #{y}px")}) |> Repo.update()
+    Slide.changeset(slide, %{sentence_positions: Map.put(slide.sentence_positions || %{}, sentence_id, "left: #{x}px; top: #{y}px; z-index: #{z}")}) |> Repo.update()
     lesson = Repo.get!(Lesson, socket.assigns.play_lesson.id) |> Repo.preload(slides: from(s in Slide, order_by: s.position))
     {:noreply, assign(socket, play_lesson: lesson)}
   end

@@ -12,6 +12,8 @@ Hooks.Draggable = {
       offset.x = point.clientX - parseInt(el.style.left, 10)
       offset.y = point.clientY - parseInt(el.style.top, 10)
       el.style.cursor = "grabbing"
+      const allZ = Array.from(document.querySelectorAll('.mkaps-draggable')).map(e => e.style.zIndex);
+      el.style.zIndex = Math.max(...allZ) + 1
     }
 
     const doDrag = (e) => {
@@ -28,7 +30,8 @@ Hooks.Draggable = {
       this.pushEvent("drag_sentence", {
         sentence: el.id,
         x: parseInt(el.style.left, 10),
-        y: parseInt(el.style.top, 10)
+        y: parseInt(el.style.top, 10),
+        z: parseInt(el.style.zIndex, 10)
       })
     }
 
