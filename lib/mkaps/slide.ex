@@ -15,6 +15,6 @@ defmodule Mkaps.Slide do
   def changeset(slide, attrs) do
     slide
     |> cast(attrs, [:position, :sentences, :images, :lesson_id, :sentence_positions])
-    |> validate_required([:position, :sentences, :images, :lesson_id])
+    |> validate_required([:position, :lesson_id])
   end
 end
