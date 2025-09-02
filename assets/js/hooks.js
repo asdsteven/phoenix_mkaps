@@ -28,8 +28,8 @@ Hooks.Draggable = {
       if (!isDragging) return
       isDragging = false
       el.style.cursor = "grab"
-      this.pushEvent("drag_sentence", {
-        sentence: el.id,
+      this.pushEvent("drag", {
+        object: el.id,
         x: parseInt(el.style.left, 10),
         y: parseInt(el.style.top, 10),
         z: parseInt(el.style.zIndex, 10)
