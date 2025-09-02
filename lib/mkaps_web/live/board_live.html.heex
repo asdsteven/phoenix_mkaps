@@ -1,33 +1,42 @@
 <%= if @list_lesson do %>
     <%= for lesson <- @list_lesson do %>
-        <.form for={%{}} phx-submit="save_lesson">
+        <.form for={%{}} phx-submit="save_lesson" class="m-2">
             <input type="hidden" name="lesson" value={lesson.id}>
-            <input type="text" class="input" name="name" value={lesson.name}>
-            <button type="submit" class="btn btn-primary">Save</button>
-            <button type="button" class="btn btn-secondary" phx-click="move_lesson" phx-value-lesson={lesson.id}>Move</button>
-            <button type="button" class="btn btn-secondary" phx-click="edit_lesson" phx-value-lesson={lesson.id}>Edit</button>
-            <button type="button" class="btn btn-accent" phx-click="play_lesson" phx-value-lesson={lesson.id}>Play</button>
+            <div class="join">
+                <input type="text" class="join-item input" name="name" value={lesson.name}>
+                <button type="submit" class="join-item btn btn-primary">Save</button>
+                <button type="button" class="join-item btn btn-secondary" phx-click="move_lesson" phx-value-lesson={lesson.id}>Move</button>
+                <button type="button" class="join-item btn btn-secondary" phx-click="edit_lesson" phx-value-lesson={lesson.id}>Edit</button>
+                <button type="button" class="join-item btn btn-accent" phx-click="play_lesson" phx-value-lesson={lesson.id}>Play</button>
+            </div>
         </.form>
     <% end %>
-    <.form for={%{}} phx-submit="create_lesson">
-        <input type="text" class="input" name="name" placeholder="Lesson name">
-        <button type="submit" class="btn btn-primary">Create</button>
+    <.form for={%{}} phx-submit="create_lesson" class="m-2">
+        <div class="join">
+            <input type="text" class="join-item input" name="name" placeholder="Lesson name">
+            <button type="submit" class="join-item btn btn-primary">Create</button>
+        </div>
     </.form>
 <% else %>
     <%= if @edit_lesson do %>
-        <button class="btn btn-accent" phx-click="play_lesson" phx-value-lesson={@edit_lesson.id}>Play</button>
-        <button class="btn btn-primary" phx-click="list_lesson">List lesson</button>
-        <button class="btn btn-secondary" phx-click="reset_positions">Reset positions</button>
+        <div class="join m-2">
+            <button class="join-item btn btn-accent" phx-click="play_lesson" phx-value-lesson={@edit_lesson.id}>Play</button>
+            <button class="join-item btn btn-primary" phx-click="list_lesson">List lesson</button>
+            <button class="join-item btn btn-secondary" phx-click="reset_positions">Reset positions</button>
+            <button class="join-item btn btn-info" phx-click="upload_images">Upload images</button>
+        </div>
         <%= for slide <- @edit_lesson.slides do %>
-            <.form for={%{}} phx-submit="save_slide">
+            <.form for={%{}} phx-submit="save_slide" class="m-2">
                 <input type="hidden" name="slide" value={slide.id}>
                 <textarea placeholder="Sentences" class="textarea" name="sentences"><%= slide.sentences %></textarea>
                 <textarea placeholder="Images" class="textarea" name="images"><%= slide.images %></textarea>
-                <button type="submit" class="btn btn-primary">Save</button>
-                <button type="button" class="btn btn-secondary" phx-click="move_slide" phx-value-slide={slide.id}>Move</button>
+                <div class="join">
+                    <button type="submit" class="join-item btn btn-primary">Save</button>
+                    <button type="button" class="join-item btn btn-secondary" phx-click="move_slide" phx-value-slide={slide.id}>Move</button>
+                </div>
             </.form>
         <% end %>
-        <.form for={%{}}phx-submit="create_slide">
+        <.form for={%{}}phx-submit="create_slide" class="m-2">
             <textarea placeholder="Sentences" class="textarea" name="sentences"></textarea>
             <textarea placeholder="Images" class="textarea" name="images"></textarea>
             <button type="submit" class="btn btn-primary">Create</button>
