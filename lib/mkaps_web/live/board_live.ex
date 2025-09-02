@@ -34,7 +34,28 @@ defmodule MkapsWeb.BoardLive do
     {:noreply, assign(socket, list_lesson: Repo.all(from l in Lesson, order_by: l.position))}
   end
 
-  def handle_event("move_lesson", %{"lesson" => _lesson_id}, socket) do
+  def handle_event("move_lesson", %{"lesson" => lesson_id}, socket) do
+    Repo.transaction(fn ->
+      pos = Repo.get!(Lesson, String.to_integer(lesson_id)).position
+
+      # Find the previous row
+      prev =
+        from(l in Lesson,
+          where: l.position == ^(pos - 1)
+        )
+        |> Repo.one!()
+
+      # Swap positions
+      Repo.update_all(
+        from(l in Lesson, where: l.id == ^prev.id),
+        set: [position: pos]
+      )
+
+      Repo.update_all(
+        from(l in Lesson, where: l.id == ^lesson_id),
+        set: [position: pos - 1]
+      )
+    end)
     {:noreply, assign(socket, list_lesson: Repo.all(from l in Lesson, order_by: l.position))}
   end
 
@@ -67,7 +88,28 @@ defmodule MkapsWeb.BoardLive do
     {:noreply, assign(socket, list_lesson: nil, edit_lesson: lesson)}
   end
 
-  def handle_event("move_slide", %{"slide" => _slide_id}, socket) do
+  def handle_event("move_slide", %{"slide" => slide_id}, socket) do
+    Repo.transaction(fn ->
+      pos = Repo.get!(Slide, String.to_integer(slide_id)).position
+
+      # Find the previous row
+      prev =
+        from(s in Slide,
+          where: s.position == ^(pos - 1)
+        )
+        |> Repo.one!()
+
+      # Swap positions
+      Repo.update_all(
+        from(s in Slide, where: s.id == ^prev.id),
+        set: [position: pos]
+      )
+
+      Repo.update_all(
+        from(s in Slide, where: s.id == ^slide_id),
+        set: [position: pos - 1]
+      )
+    end)
     lesson = Repo.get!(Lesson, socket.assigns.edit_lesson.id) |> Repo.preload(slides: from(s in Slide, order_by: s.position))
     {:noreply, assign(socket, list_lesson: nil, edit_lesson: lesson)}
   end

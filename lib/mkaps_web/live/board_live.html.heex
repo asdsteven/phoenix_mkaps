@@ -44,9 +44,9 @@
             <% end %>
             <div class="absolute bottom-0 w-full flex justify-between">
                 <div class="flex-none join">
-                    <button class="join-item btn btn-outline btn-primary" phx-click="reset_positions">🧲</button>
-                    <button class="join-item btn btn-outline btn-primary" phx-click="list_lesson">📂</button>
-                    <button class="join-item btn btn-outline btn-primary" phx-click="edit_lesson" phx-value-lesson={@play_lesson.id}>✏️</button>
+                    <button class="join-item btn btn-outline btn-primary kai" phx-click="list_lesson">瀏覽</button>
+                    <button class="join-item btn btn-outline btn-primary kai" phx-click="edit_lesson" phx-value-lesson={@play_lesson.id}>編輯</button>
+                    <button class="join-item btn btn-outline btn-primary kai" phx-click="reset_positions">原位</button>
                 </div>
                 <div class="flex-none join">
                     <button :for={{_slide, i} <- Enum.with_index(@play_lesson.slides)}
