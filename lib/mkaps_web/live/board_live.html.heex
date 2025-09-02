@@ -66,7 +66,14 @@
             <div class="flex justify-center my-4" :for={{sentence, i} <- Enum.with_index(String.split(Enum.at(@play_lesson.slides, @play_index).sentences, "\n"))}>
                 <span class={"relative px-4 py-2 #{Enum.at(@font_sizes, @font_size)} rounded-lg bg-stone-100 shadow-sm/100 text-black kai mkaps-draggable"} phx-hook="Draggable" id={"sentence-#{i}"}
                       style={Map.get(Enum.at(@play_lesson.slides, @play_index).sentence_positions || %{}, "sentence-#{i}", "left:0px;top:0px;z-index:0")}>
-                    <%= sentence %>
+                    <span :for={{grapheme, j} <- Enum.with_index(String.graphemes(sentence))}
+                          class={["inline-block",
+                               MapSet.member?(@graphemes, "#{i},#{j}") && "text-violet-900 bg-violet-200",
+                               !MapSet.member?(@graphemes, "#{i},#{j-1}") && "rounded-l-md",
+                               !MapSet.member?(@graphemes, "#{i},#{j+1}") && "rounded-r-md"]}
+                          phx-click="toggle-grapheme" phx-value-key={"#{i},#{j}"}>
+                        <%= grapheme %>
+                    </span>
                 </span>
             </div>
         <% end %>
@@ -81,7 +88,7 @@
                 <button :for={{_slide, i} <- Enum.with_index(@play_lesson.slides)}
                         phx-click="set-slide"
                         phx-value-slide={i}
-                        class={"join-item btn btn-sm btn-outline #{if i == @play_index, do: "btn-primary"}"}>
+                        class={["join-item btn btn-sm btn-outline", i == @play_index && "btn-primary"]}>
                     <%= i+1 %>
                 </button>
             </div>

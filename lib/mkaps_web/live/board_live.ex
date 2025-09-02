@@ -11,7 +11,8 @@ defmodule MkapsWeb.BoardLive do
   def mount(_params, _session, socket) do
     lesson = Repo.one(from lesson in Lesson, order_by: lesson.id, limit: 1) |> Repo.preload(slides: from(s in Slide, order_by: s.position))
     {:ok, assign(socket, page: :play_lesson, play_lesson: lesson, play_index: 0, play_menu: false)
-    |> assign(font_sizes: @font_sizes, image_sizes: @image_sizes, font_size: 8, image_size: 6)
+    |> assign(font_sizes: @font_sizes, image_sizes: @image_sizes, font_size: 9, image_size: 5)
+    |> assign(graphemes: MapSet.new())
     |> allow_upload(:image,
      accept: :any,
      max_file_size: 1_000_000_000,
@@ -152,6 +153,16 @@ defmodule MkapsWeb.BoardLive do
 
     lesson = Repo.get!(Lesson, socket.assigns.play_lesson.id) |> Repo.preload(slides: from(s in Slide, order_by: s.position))
     {:noreply, assign(socket, play_lesson: lesson)}
+  end
+
+  def handle_event("toggle-grapheme", %{"key" => key}, socket) do
+    {:noreply, update(socket, :graphemes, fn graphemes ->
+        if MapSet.member?(graphemes, key) do
+          MapSet.delete(graphemes, key)
+        else
+          MapSet.put(graphemes, key)
+        end
+      end)}
   end
 
   def handle_event("reset-positions", _params, socket) do
