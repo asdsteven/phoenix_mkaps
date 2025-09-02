@@ -41,7 +41,7 @@
             </div>
             <div :if={slide.images}>
                 <div :for={image <- String.split(slide.images, "\n")}>
-                    <img src={"/uploads/#{image}"} class="h-24 w-auto">
+                    <img src={image} class="h-24 w-auto">
                 </div>
             </div>
         </.form>
@@ -79,7 +79,7 @@
         <% end %>
         <%= if @play_lesson && length(@play_lesson.slides) > 0 && Enum.at(@play_lesson.slides, @play_index).images do %>
             <div class="flex justify-center my-4" :for={{image, i} <- Enum.with_index(String.split(Enum.at(@play_lesson.slides, @play_index).images, "\n"))}>
-                <img class={"relative mkaps-draggable w-auto #{Enum.at(@image_sizes, @image_size)} shadow-sm/100"} src={"/uploads/#{image}"} phx-hook="Draggable" id={"image-#{i}"}
+                <img class={"relative mkaps-draggable w-auto #{Enum.at(@image_sizes, @image_size)} shadow-sm/100"} src={image} phx-hook="Draggable" id={"image-#{i}"}
                       style={Map.get(Enum.at(@play_lesson.slides, @play_index).sentence_positions || %{}, "image-#{i}", "left:0px;top:0px;z-index:0")}>
             </div>
         <% end %>
