@@ -31,13 +31,18 @@
         <div>{@progress}</div>
     </form>
     <%= for slide <- @edit_lesson.slides do %>
-        <.form for={%{}} phx-submit="save_slide" class="m-2">
+        <.form for={%{}} phx-submit="save_slide" class="m-2 flex">
             <input type="hidden" name="slide" value={slide.id}>
             <textarea placeholder="Sentences" class="textarea" name="sentences"><%= slide.sentences %></textarea>
             <textarea placeholder="Images" class="textarea" name="images"><%= slide.images %></textarea>
             <div class="join">
                 <button type="submit" class="join-item btn btn-primary">Save</button>
                 <button type="button" class="join-item btn btn-secondary" phx-click="move_slide" phx-value-slide={slide.id}>Move</button>
+            </div>
+            <div :if={slide.images}>
+                <div :for={image <- String.split(slide.images, "\n")}>
+                    <img src={"/uploads/#{image}"} class="h-24 w-auto">
+                </div>
             </div>
         </.form>
     <% end %>
