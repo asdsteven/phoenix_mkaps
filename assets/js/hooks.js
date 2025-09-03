@@ -31,7 +31,7 @@ Hooks.Draggable = {
     const stopDrag = () => {
       el.style.cursor = "grab"
       this.pushEvent("drag", {
-        object: el.id,
+        item: el.id,
         x: parseInt(el.style.left, 10),
         y: parseInt(el.style.top, 10),
         z: parseInt(el.style.zIndex, 10)

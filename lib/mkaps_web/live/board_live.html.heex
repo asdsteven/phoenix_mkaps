@@ -7,7 +7,7 @@
                 <button type="submit" class="join-item btn btn-primary">Save</button>
                 <button type="button" class="join-item btn btn-secondary" phx-click="move-lesson" phx-value-lesson={lesson.id}>Move</button>
                 <button type="button" class="join-item btn btn-secondary" phx-click="edit-lesson" phx-value-lesson={lesson.id}>Edit</button>
-                <button type="button" class="join-item btn btn-accent" phx-click="play-lesson" phx-value-lesson={lesson.id}>Play</button>
+                <button type="button" class="join-item btn btn-accent" phx-click="play-lesson" phx-value-lesson={lesson.id} phx-value-slide="0">Play</button>
             </div>
         </.form>
     <% end %>
@@ -21,16 +21,15 @@
 
 <%= if @page == :edit_lesson do %>
     <div class="join m-2">
-        <button class="join-item btn btn-accent" phx-click="play-lesson" phx-value-lesson={@edit_lesson.id}>Play</button>
+        <button class="join-item btn btn-accent" phx-click="play-lesson" phx-value-lesson={@edit_lesson.id} phx-value-slide={@play_index}>Play</button>
         <button class="join-item btn btn-primary" phx-click="list-lesson">List lesson</button>
-        <button class="join-item btn btn-secondary" phx-click="reset-positions">Reset positions</button>
     </div>
     <form id="upload-form" phx-submit="save-image" phx-change="validate" class="m-2">
         <.live_file_input upload={@uploads.image} class="file-input file-input-primary" />
         <button type="submit">Upload</button>
         <div>{@progress}</div>
     </form>
-    <%= for slide <- @edit_lesson.slides do %>
+    <%= for {slide, i} <- Enum.with_index(@edit_lesson.slides) do %>
         <.form for={%{}} phx-submit="save-slide" class="m-2 flex">
             <input type="hidden" name="slide" value={slide.id}>
             <textarea placeholder="Sentences" class="textarea" name="sentences"><%= slide.sentences %></textarea>
@@ -38,9 +37,11 @@
             <div class="join">
                 <button type="submit" class="join-item btn btn-primary">Save</button>
                 <button type="button" class="join-item btn btn-secondary" phx-click="move-slide" phx-value-slide={slide.id}>Move</button>
+                <button type="button" class="join-item btn btn-info" phx-click="reset-layout" phx-value-slide={slide.id}>Reset layout</button>
+                <button type="button" class="join-item btn btn-accent" phx-click="play-lesson" phx-value-lesson={@edit_lesson.id} phx-value-slide={i}>Play</button>
             </div>
             <div :if={slide.images}>
-                <img :for={image <- String.split(slide.images, "\n")} src={image} class="h-24 w-auto inline">
+                <img :for={image <- String.split(slide.images, "\n")} src={image} class="h-24 w-auto inline m-1">
             </div>
         </.form>
     <% end %>
@@ -63,8 +64,10 @@
         <div :if={@play_lesson && length(@play_lesson.slides) > 0 && Enum.at(@play_lesson.slides, @play_index).sentences}
              class="flex-none">
             <div class="flex justify-center my-4" :for={{sentence, i} <- Enum.with_index(String.split(Enum.at(@play_lesson.slides, @play_index).sentences, "\n"))}>
-                <span class={"relative px-4 py-2 #{Enum.at(@font_sizes, @font_size)} rounded-lg bg-stone-100 shadow-sm/100 text-black kai mkaps-draggable"} phx-hook="Draggable" id={"sentence-#{i}"}
-                      style={Map.get(Enum.at(@play_lesson.slides, @play_index).sentence_positions || %{}, "sentence-#{i}", "left:0px;top:0px;z-index:0")}>
+                <span class={["inline-flex flex-wrap gap-y-8 relative px-4 py-2 rounded-lg bg-stone-100 shadow-sm/100 text-black kai mkaps-draggable",
+                            Enum.at(@font_sizes, Map.get(Enum.at(@play_lesson.slides, @play_index).item_sizes || %{}, "sentence-#{i}", Enum.at(@play_lesson.slides, @play_index).font_size || 11))]}
+                      phx-hook="Draggable" id={"sentence-#{i}"}
+                      style={Map.get(Enum.at(@play_lesson.slides, @play_index).item_xyzs || %{}, "sentence-#{i}", "left:0px;top:0px;z-index:0")}>
                     <span :for={{{grapheme, deco}, j} <- Enum.with_index(graphemes(sentence))}
                           class={["inline-block",
                                MapSet.member?(@graphemes, "#{@play_index},#{i},#{j}") && "text-violet-900 bg-violet-200",
@@ -84,9 +87,10 @@
         <div :if={@play_lesson && length(@play_lesson.slides) > 0 && Enum.at(@play_lesson.slides, @play_index).images}
              class="flex flex-wrap justify-center">
             <img :for={{image, i} <- Enum.with_index(String.split(Enum.at(@play_lesson.slides, @play_index).images, "\n"))}
-                 class={"relative mkaps-draggable w-auto #{Enum.at(@image_sizes, @image_size)} shadow-sm/100 m-2"}
+                 class={["relative mkaps-draggable w-auto shadow-sm/100 m-2 rounded-lg",
+                      Enum.at(@image_sizes, Map.get(Enum.at(@play_lesson.slides, @play_index).item_sizes || %{}, "image-#{i}", Enum.at(@play_lesson.slides, @play_index).image_size || 9))]}
                  src={image} phx-hook="Draggable" id={"image-#{i}"} draggable="false"
-                 style={Map.get(Enum.at(@play_lesson.slides, @play_index).sentence_positions || %{}, "image-#{i}", "left:0px;top:0px;z-index:0")}>
+                 style={Map.get(Enum.at(@play_lesson.slides, @play_index).item_xyzs || %{}, "image-#{i}", "left:0px;top:0px;z-index:0")}>
         </div>
         <div class="absolute bottom-0 left-0 w-full flex justify-center">
             <div class="flex-none join z-9999">
@@ -101,12 +105,12 @@
         <div class="absolute bottom-0 left-0 flex flex-col z-9999">
             <%= if @play_menu do %>
                 <div class="join">
-                    <button class="join-item btn btn-outline btn-primary kai" phx-click="object-smaller">縮小</button>
-                    <button class="join-item btn btn-outline btn-primary kai" phx-click="object-larger">放大</button>
+                    <button class="join-item btn btn-outline btn-primary kai" phx-click="item-smaller">縮小</button>
+                    <button class="join-item btn btn-outline btn-primary kai" phx-click="item-larger">放大</button>
                 </div>
                 <div class="join">
-                    <button class="join-item btn btn-outline btn-primary kai" phx-click="text-smaller">字小</button>
-                    <button class="join-item btn btn-outline btn-primary kai" phx-click="text-larger">字大</button>
+                    <button class="join-item btn btn-outline btn-primary kai" phx-click="font-smaller">字小</button>
+                    <button class="join-item btn btn-outline btn-primary kai" phx-click="font-larger">字大</button>
                 </div>
                 <div class="join">
                     <button class="join-item btn btn-outline btn-primary kai" phx-click="image-smaller">圖小</button>
