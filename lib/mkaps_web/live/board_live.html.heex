@@ -67,10 +67,10 @@
                       style={Map.get(Enum.at(@play_lesson.slides, @play_index).sentence_positions || %{}, "sentence-#{i}", "left:0px;top:0px;z-index:0")}>
                     <span :for={{grapheme, j} <- Enum.with_index(String.graphemes(sentence))}
                           class={["inline-block",
-                               MapSet.member?(@graphemes, "#{i},#{j}") && "text-violet-900 bg-violet-200",
-                               !MapSet.member?(@graphemes, "#{i},#{j-1}") && "rounded-l-md",
-                               !MapSet.member?(@graphemes, "#{i},#{j+1}") && "rounded-r-md"]}
-                          phx-click="toggle-grapheme" phx-value-key={"#{i},#{j}"}>
+                               MapSet.member?(@graphemes, "#{@play_index},#{i},#{j}") && "text-violet-900 bg-violet-200",
+                               !MapSet.member?(@graphemes, "#{@play_index},#{i},#{j-1}") && "rounded-l-md",
+                               !MapSet.member?(@graphemes, "#{@play_index},#{i},#{j+1}") && "rounded-r-md"]}
+                          data-key={"#{@play_index},#{i},#{j}"}>
                         <%= grapheme %>
                     </span>
                 </span>
@@ -108,6 +108,7 @@
                     <button class="join-item btn btn-outline btn-primary kai" phx-click="image-larger">圖大</button>
                 </div>
                 <button class="btn btn-outline btn-primary kai" phx-click="edit-lesson" phx-value-lesson={@play_lesson.id}>編輯</button>
+                <button class="btn btn-outline btn-primary kai" phx-hook="FullScreen" id="fullscreen">全屏</button>
                 <button class="btn btn-outline btn-primary kai" phx-click="play-menu">選單</button>
             <% else %>
                 <button class="btn btn-outline btn-primary kai" phx-click="play-menu">選單</button>

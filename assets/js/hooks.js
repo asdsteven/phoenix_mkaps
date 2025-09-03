@@ -1,35 +1,34 @@
 let Hooks = {}
 
+let touches = new Map()
+
 Hooks.Draggable = {
   mounted() {
     let el = this.el
     let offset = { x: 0, y: 0 }
     let isDragging = 0
+    let touchended = false
 
-    const startDrag = (e) => {
-      if (isDragging) return
-      isDragging = 1
-      const point = e.touches ? e.touches[0] : e
+    const startDrag = (point) => {
       offset.x = point.clientX - parseInt(el.style.left, 10)
       offset.y = point.clientY - parseInt(el.style.top, 10)
-      el.style.cursor = "grabbing"
       const allZ = Array.from(document.querySelectorAll('.mkaps-draggable')).map(e => e.style.zIndex);
       el.style.zIndex = Math.max(...allZ) + 1
     }
 
-    const doDrag = (e) => {
-      if (!isDragging) return
-      isDragging = 2
-      const point = e.touches ? e.touches[0] : e
+    const doDrag = (point) => {
+      el.style.cursor = "grabbing"
       el.style.left = point.clientX - offset.x + "px"
       el.style.top = point.clientY - offset.y + "px"
     }
 
+    const toggleGrapheme = (key) => {
+      this.pushEvent("toggle-grapheme", {
+        key: key
+      })
+    }
+
     const stopDrag = () => {
-      if (!isDragging) return
-      setTimeout(() => {
-        isDragging = 0
-      }, 0);
       el.style.cursor = "grab"
       this.pushEvent("drag", {
         object: el.id,
@@ -41,19 +40,61 @@ Hooks.Draggable = {
 
     el.style.cursor = "grab"
 
-    el.addEventListener("mousedown", startDrag)
-    el.addEventListener("touchstart", startDrag)
+    el.addEventListener("mousedown", (e) => {
+      if (touchended) return
+      if (isDragging) return
+      isDragging = 1
+      startDrag(e)
+    })
+    el.addEventListener("touchstart", (e) => {
+      if (isDragging) return
+      for (const touch of e.changedTouches) {
+        if (touches.has(touch.identifier)) continue
+        if (touch.target.closest('.mkaps-draggable') !== el) continue
+        isDragging = 11
+        touches.set(touch.identifier, el)
+        startDrag(touch)
+        break
+      }
+    })
 
-    window.addEventListener("mousemove", doDrag)
-    window.addEventListener("touchmove", doDrag)
+    window.addEventListener("mousemove", (e) => {
+      if (![1, 2].includes(isDragging)) return
+      isDragging = 2
+      doDrag(e)
+    })
+    window.addEventListener("touchmove", (e) => {
+      if (![11, 12].includes(isDragging)) return
+      for (const touch of e.changedTouches) {
+        if (touches.get(touch.identifier) !== el) continue
+        isDragging = 12
+        doDrag(touch)
+        break
+      }
+    })
 
-    window.addEventListener("mouseup", stopDrag)
-    window.addEventListener("touchend", stopDrag)
-
-    el.addEventListener("click", (e) => {
-      if (isDragging == 2) {
-        e.preventDefault();
-        e.stopImmediatePropagation();
+    window.addEventListener("mouseup", (e) => {
+      if (![1, 2].includes(isDragging)) return
+      if (isDragging == 1) {
+        toggleGrapheme(e.target.dataset.key)
+      } else {
+        stopDrag()
+      }
+      isDragging = 0
+    })
+    window.addEventListener("touchend", (e) => {
+      if (![11, 12].includes(isDragging)) return
+      for (const touch of e.changedTouches) {
+        if (touches.get(touch.identifier) !== el) continue
+        if (isDragging == 11) {
+          toggleGrapheme(e.target.dataset.key)
+        } else {
+          stopDrag()
+        }
+        isDragging = 0
+        touches.delete(touch.identifier)
+        touchended = true
+        break
       }
     })
   }
@@ -68,6 +109,18 @@ Hooks.CopyOnClick = {
         setTimeout(() => this.el.classList.remove("text-success"), 1000)
       })
     })
+  }
+}
+
+Hooks.FullScreen = {
+  mounted() {
+    this.el.addEventListener("click", () => {
+      if (document.fullscreenElement) {
+        document.exitFullscreen?.();
+      } else {
+        document.documentElement.requestFullscreen?.();
+      }
+    });
   }
 }
 

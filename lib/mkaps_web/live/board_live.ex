@@ -139,7 +139,7 @@ defmodule MkapsWeb.BoardLive do
       {:noreply, assign(socket, page: :play_lesson)}
     else
       lesson = Repo.get!(Lesson, String.to_integer(lesson_id)) |> Repo.preload(slides: from(s in Slide, order_by: s.position))
-      {:noreply, assign(socket, page: :play_lesson, play_lesson: lesson, play_index: 0, play_menu: false)}
+      {:noreply, assign(socket, page: :play_lesson, play_lesson: lesson, play_index: 0, play_menu: false, graphemes: MapSet.new())}
     end
   end
 
