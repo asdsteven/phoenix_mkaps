@@ -51,12 +51,13 @@ Hooks.Draggable = {
       for (const touch of e.changedTouches) {
         if (touches.has(touch.identifier)) continue
         if (touch.target.closest('.mkaps-draggable') !== el) continue
+        e.preventDefault()
         isDragging = 11
         touches.set(touch.identifier, el)
         startDrag(touch)
         break
       }
-    })
+    }, { passive: false })
 
     window.addEventListener("mousemove", (e) => {
       if (![1, 2].includes(isDragging)) return
@@ -67,16 +68,17 @@ Hooks.Draggable = {
       if (![11, 12].includes(isDragging)) return
       for (const touch of e.changedTouches) {
         if (touches.get(touch.identifier) !== el) continue
+        e.preventDefault()
         isDragging = 12
         doDrag(touch)
         break
       }
-    })
+    }, { passive: false })
 
     window.addEventListener("mouseup", (e) => {
       if (![1, 2].includes(isDragging)) return
       if (isDragging == 1) {
-        toggleGrapheme(e.target.dataset.key)
+        if (e.target.dataset.key) toggleGrapheme(e.target.dataset.key)
       } else {
         stopDrag()
       }

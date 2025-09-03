@@ -65,13 +65,18 @@
             <div class="flex justify-center my-4" :for={{sentence, i} <- Enum.with_index(String.split(Enum.at(@play_lesson.slides, @play_index).sentences, "\n"))}>
                 <span class={"relative px-4 py-2 #{Enum.at(@font_sizes, @font_size)} rounded-lg bg-stone-100 shadow-sm/100 text-black kai mkaps-draggable"} phx-hook="Draggable" id={"sentence-#{i}"}
                       style={Map.get(Enum.at(@play_lesson.slides, @play_index).sentence_positions || %{}, "sentence-#{i}", "left:0px;top:0px;z-index:0")}>
-                    <span :for={{grapheme, j} <- Enum.with_index(String.graphemes(sentence))}
+                    <span :for={{{grapheme, deco}, j} <- Enum.with_index(graphemes(sentence))}
                           class={["inline-block",
                                MapSet.member?(@graphemes, "#{@play_index},#{i},#{j}") && "text-violet-900 bg-violet-200",
                                !MapSet.member?(@graphemes, "#{@play_index},#{i},#{j-1}") && "rounded-l-md",
-                               !MapSet.member?(@graphemes, "#{@play_index},#{i},#{j+1}") && "rounded-r-md"]}
+                               !MapSet.member?(@graphemes, "#{@play_index},#{i},#{j+1}") && "rounded-r-md",
+                               deco == "underline" && "underline underline-offset-[0.2em]"]}
                           data-key={"#{@play_index},#{i},#{j}"}>
-                        <%= grapheme %>
+                        <%= if grapheme == " " do %>
+                            &nbsp;
+                        <% else %>
+                            <%= grapheme %>
+                        <% end %>
                     </span>
                 </span>
             </div>
@@ -79,7 +84,7 @@
         <div :if={@play_lesson && length(@play_lesson.slides) > 0 && Enum.at(@play_lesson.slides, @play_index).images}
              class="flex flex-wrap justify-center">
             <img :for={{image, i} <- Enum.with_index(String.split(Enum.at(@play_lesson.slides, @play_index).images, "\n"))}
-                 class={"relative mkaps-draggable w-auto #{Enum.at(@image_sizes, @image_size)} shadow-sm/100"}
+                 class={"relative mkaps-draggable w-auto #{Enum.at(@image_sizes, @image_size)} shadow-sm/100 m-2"}
                  src={image} phx-hook="Draggable" id={"image-#{i}"} draggable="false"
                  style={Map.get(Enum.at(@play_lesson.slides, @play_index).sentence_positions || %{}, "image-#{i}", "left:0px;top:0px;z-index:0")}>
         </div>

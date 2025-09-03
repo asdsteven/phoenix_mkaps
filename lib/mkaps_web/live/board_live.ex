@@ -9,7 +9,7 @@ defmodule MkapsWeb.BoardLive do
   @image_sizes ["h-10", "h-20", "h-30", "h-40", "h-50", "h-60", "h-70", "h-80", "h-90", "h-100", "h-110", "h-120", "h-150", "h-200"]
 
   def mount(_params, _session, socket) do
-    lesson = Repo.one(from lesson in Lesson, order_by: lesson.id, limit: 1) |> Repo.preload(slides: from(s in Slide, order_by: s.position))
+    lesson = Repo.one(from lesson in Lesson, order_by: lesson.position, limit: 1) |> Repo.preload(slides: from(s in Slide, order_by: s.position))
     {:ok, assign(socket, page: :play_lesson, play_lesson: lesson, play_index: 0, play_menu: false)
     |> assign(font_sizes: @font_sizes, image_sizes: @image_sizes, font_size: 11, image_size: 5)
     |> assign(graphemes: MapSet.new())
@@ -135,10 +135,10 @@ defmodule MkapsWeb.BoardLive do
   end
 
   def handle_event("play-lesson", %{"lesson" => lesson_id}, socket) do
+    lesson = Repo.get!(Lesson, String.to_integer(lesson_id)) |> Repo.preload(slides: from(s in Slide, order_by: s.position))
     if socket.assigns.play_lesson && String.to_integer(lesson_id) == socket.assigns.play_lesson.id do
-      {:noreply, assign(socket, page: :play_lesson)}
+      {:noreply, assign(socket, page: :play_lesson, play_lesson: lesson)}
     else
-      lesson = Repo.get!(Lesson, String.to_integer(lesson_id)) |> Repo.preload(slides: from(s in Slide, order_by: s.position))
       {:noreply, assign(socket, page: :play_lesson, play_lesson: lesson, play_index: 0, play_menu: false, graphemes: MapSet.new())}
     end
   end
@@ -163,6 +163,45 @@ defmodule MkapsWeb.BoardLive do
           MapSet.put(graphemes, key)
         end
       end)}
+  end
+
+  defp graphemes(s) do
+    parse_graphemes(String.graphemes(s), [])
+  end
+
+  defp parse_graphemes([], acc), do: Enum.reverse(acc)
+
+  defp parse_graphemes(["_" | rest], acc) do
+    {underlined, remaining} = collect_until(rest, "_", [])
+    merged = Enum.join(underlined)
+    parse_graphemes(remaining, [{merged, "underline"} | acc])
+  end
+
+  defp parse_graphemes([char | rest], acc) do
+    if is_ascii_letter_or_digit(char) do
+        {group, remaining} = collect_while([char | rest], &is_ascii_letter_or_digit/1, [])
+        merged = Enum.join(group)
+        parse_graphemes(remaining, [{merged, nil} | acc])
+    else
+        parse_graphemes(rest, [{char, nil} | acc])
+    end
+  end
+
+  defp collect_until([], _target, collected), do: {Enum.reverse(collected), []}
+  defp collect_until([target | rest], target, collected), do: {Enum.reverse(collected), rest}
+  defp collect_until([char | rest], target, collected), do: collect_until(rest, target, [char | collected])
+
+  defp collect_while([], _pred, collected), do: {Enum.reverse(collected), []}
+  defp collect_while([char | rest], pred, collected) do
+    if pred.(char) do
+      collect_while(rest, pred, [char | collected])
+    else
+      {Enum.reverse(collected), [char | rest]}
+    end
+  end
+
+  defp is_ascii_letter_or_digit(char) do
+    char =~ ~r/^[A-Za-z0-9]$/
   end
 
   def handle_event("reset-positions", _params, socket) do
