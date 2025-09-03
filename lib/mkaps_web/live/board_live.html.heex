@@ -79,7 +79,8 @@
         <div :if={@play_lesson && length(@play_lesson.slides) > 0 && Enum.at(@play_lesson.slides, @play_index).images}
              class="flex flex-wrap justify-center">
             <img :for={{image, i} <- Enum.with_index(String.split(Enum.at(@play_lesson.slides, @play_index).images, "\n"))}
-                 class={"relative mkaps-draggable w-auto #{Enum.at(@image_sizes, @image_size)} shadow-sm/100"} src={image} phx-hook="Draggable" id={"image-#{i}"}
+                 class={"relative mkaps-draggable w-auto #{Enum.at(@image_sizes, @image_size)} shadow-sm/100"}
+                 src={image} phx-hook="Draggable" id={"image-#{i}"} draggable="false"
                  style={Map.get(Enum.at(@play_lesson.slides, @play_index).sentence_positions || %{}, "image-#{i}", "left:0px;top:0px;z-index:0")}>
         </div>
         <div class="absolute bottom-0 left-0 w-full flex justify-center">

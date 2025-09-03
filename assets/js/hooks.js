@@ -15,7 +15,6 @@ Hooks.Draggable = {
       el.style.cursor = "grabbing"
       const allZ = Array.from(document.querySelectorAll('.mkaps-draggable')).map(e => e.style.zIndex);
       el.style.zIndex = Math.max(...allZ) + 1
-      e.preventDefault()
     }
 
     const doDrag = (e) => {
