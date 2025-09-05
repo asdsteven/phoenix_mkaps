@@ -170,7 +170,7 @@ defmodule MkapsWeb.BoardLive do
     [index, i, j] = String.split(key, "-")
     slide = Enum.at(socket.assigns.play_lesson.slides, socket.assigns.play_index)
     sentence = Enum.at(String.split(slide.sentences, "\n"), String.to_integer(i))
-    {_, neighbours} = Enum.reduce(Enum.with_index(graphemes(sentence)), {0, []}, fn {{grapheme, _}, k}, {belongs_here, acc} ->
+    {belongs_here, acc} = Enum.reduce(Enum.with_index(graphemes(sentence)), {0, []}, fn {{grapheme, _}, k}, {belongs_here, acc} ->
       if belongs_here == 2 do
         {2, acc}
       else
@@ -185,6 +185,7 @@ defmodule MkapsWeb.BoardLive do
         end
       end
     end)
+    neighbours = if belongs_here == 0, do: [], else: acc
     highlighted = Enum.count(neighbours, &MapSet.member?(socket.assigns.graphemes, "#{index}-#{i}-#{&1}"))
     {:noreply, assign(socket, :graphemes,
       if highlighted > 0 and highlighted == length(neighbours) do
