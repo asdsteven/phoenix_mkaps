@@ -6,10 +6,13 @@ Hooks.Draggable = {
   mounted() {
     let el = this.el
     let offset = { x: 0, y: 0 }
+    let origin = { x: 0, y: 0 }
     let isDragging = 0
     let touchended = false
 
     const startDrag = (point) => {
+      origin.x = point.clientX
+      origin.y = point.clientY
       offset.x = point.clientX - parseInt(el.style.left, 10)
       offset.y = point.clientY - parseInt(el.style.top, 10)
       const allZ = Array.from(document.querySelectorAll('.mkaps-draggable')).map(e => e.style.zIndex);
@@ -61,6 +64,7 @@ Hooks.Draggable = {
 
     window.addEventListener("mousemove", (e) => {
       if (![1, 2].includes(isDragging)) return
+      if (isDragging == 1 && Math.abs(e.clientX - origin.x) < 10 && Math.abs(e.clientY - origin.y) < 10) return
       isDragging = 2
       doDrag(e)
     })
@@ -68,6 +72,7 @@ Hooks.Draggable = {
       if (![11, 12].includes(isDragging)) return
       for (const touch of e.changedTouches) {
         if (touches.get(touch.identifier) !== el) continue
+        if (isDragging == 11 && Math.abs(touch.clientX - origin.x) < 10 && Math.abs(touch.clientY - origin.y) < 10) return
         e.preventDefault()
         isDragging = 12
         doDrag(touch)

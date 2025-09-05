@@ -13,6 +13,7 @@ defmodule MkapsWeb.BoardLive do
     {:ok, assign(socket, page: :play_lesson, play_lesson: lesson, play_index: 0, play_menu: false)
     |> assign(font_sizes: @font_sizes, image_sizes: @image_sizes)
     |> assign(graphemes: MapSet.new())
+    |> assign(changed_lessons: MapSet.new())
     |> allow_upload(:image,
      accept: :any,
      max_file_size: 1_000_000_000,
@@ -27,10 +28,16 @@ defmodule MkapsWeb.BoardLive do
     {:noreply, assign(socket, page: :list_lesson, list_lesson: Repo.all(from l in Lesson, order_by: l.position))}
   end
 
+  def handle_event("change-lesson", %{"lesson" => lesson_id}, socket) do
+    {:noreply, assign(socket, changed_lessons: MapSet.put(socket.assigns.changed_lessons, String.to_integer(lesson_id)))}
+  end
+
   def handle_event("save-lesson", %{"lesson" => lesson_id, "name" => name}, socket) do
     lesson = Repo.get!(Lesson, String.to_integer(lesson_id))
     Lesson.changeset(lesson, %{name: name}) |> Repo.update()
-    {:noreply, assign(socket, list_lesson: Repo.all(from l in Lesson, order_by: l.position))}
+    {:noreply, assign(socket,
+        changed_lessons: MapSet.delete(socket.assigns.changed_lessons, String.to_integer(lesson_id)),
+        list_lesson: Repo.all(from l in Lesson, order_by: l.position))}
   end
 
   def handle_event("create-lesson", %{"name" => name}, socket) do
@@ -94,7 +101,7 @@ defmodule MkapsWeb.BoardLive do
 
   def handle_event("create-slide", %{"sentences" => sentences, "images" => images}, socket) do
     max_pos =
-      from(s in Slide, select: max(s.position))
+      from(s in Slide, where: s.lesson_id == ^socket.assigns.edit_lesson.id, select: max(s.position))
       |> Repo.one()
 
     next_pos = (max_pos || -1) + 1
@@ -123,7 +130,7 @@ defmodule MkapsWeb.BoardLive do
       # Find the previous row
       prev =
         from(s in Slide,
-          where: s.position == ^(pos - 1)
+          where: s.position == ^(pos - 1) and s.lesson_id == ^socket.assigns.edit_lesson.id
         )
         |> Repo.one!()
 
