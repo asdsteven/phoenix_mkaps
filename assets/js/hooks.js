@@ -33,6 +33,8 @@ Hooks.Draggable = {
 
     const stopDrag = () => {
       el.style.cursor = "grab"
+      /* const allZ = Array.from(document.querySelectorAll('.mkaps-draggable')).map(e => e.style.zIndex);
+       * el.style.zIndex = Math.max(...allZ) + 1 */
       this.pushEvent("drag", {
         item: el.id,
         x: parseInt(el.style.left, 10),

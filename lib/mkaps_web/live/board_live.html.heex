@@ -76,11 +76,11 @@
                       style={Map.get(Enum.at(@play_lesson.slides, @play_index).item_xyzs || %{}, "sentence-#{i}", "left:0px;top:0px;z-index:0")}>
                     <span :for={{{grapheme, deco}, j} <- Enum.with_index(graphemes(sentence))}
                           class={["inline-block",
-                               MapSet.member?(@graphemes, "#{@play_index},#{i},#{j}") && "text-violet-900 bg-violet-200",
-                               !MapSet.member?(@graphemes, "#{@play_index},#{i},#{j-1}") && "rounded-l-md",
-                               !MapSet.member?(@graphemes, "#{@play_index},#{i},#{j+1}") && "rounded-r-md",
+                               MapSet.member?(@graphemes, "#{@play_index}-#{i}-#{j}") && "text-violet-900 bg-violet-200",
+                               !MapSet.member?(@graphemes, "#{@play_index}-#{i}-#{j-1}") && "rounded-l-md",
+                               !MapSet.member?(@graphemes, "#{@play_index}-#{i}-#{j+1}") && "rounded-r-md",
                                deco == "underline" && "underline underline-offset-[0.15em]"]}
-                          data-key={"#{@play_index},#{i},#{j}"}>
+                          data-key={"#{@play_index}-#{i}-#{j}"}>
                         <%= if grapheme == " " do %>
                             &nbsp;
                         <% else %>

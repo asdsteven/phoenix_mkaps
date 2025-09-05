@@ -167,11 +167,37 @@ defmodule MkapsWeb.BoardLive do
   end
 
   def handle_event("toggle-grapheme", %{"key" => key}, socket) do
-    {:noreply, update(socket, :graphemes, fn graphemes ->
-        if MapSet.member?(graphemes, key) do
-          MapSet.delete(graphemes, key)
+    [index, i, j] = String.split(key, "-")
+    slide = Enum.at(socket.assigns.play_lesson.slides, socket.assigns.play_index)
+    sentence = Enum.at(String.split(slide.sentences, "\n"), String.to_integer(i))
+    {_, neighbours} = Enum.reduce(Enum.with_index(graphemes(sentence)), {0, []}, fn {{grapheme, _}, k}, {belongs_here, acc} ->
+      if belongs_here == 2 do
+        {2, acc}
+      else
+        if is_ascii_letter_or_digit(grapheme) do
+          {(if k == String.to_integer(j), do: 1, else: belongs_here), [k | acc]}
         else
-          MapSet.put(graphemes, key)
+          if belongs_here == 1 do
+            {2, acc}
+          else
+            {0, []}
+          end
+        end
+      end
+    end)
+    highlighted = Enum.count(neighbours, &MapSet.member?(socket.assigns.graphemes, "#{index}-#{i}-#{&1}"))
+    {:noreply, assign(socket, :graphemes,
+      if highlighted > 0 and highlighted == length(neighbours) do
+        MapSet.put(Enum.reduce(neighbours, socket.assigns.graphemes, &MapSet.delete(&2, "#{index}-#{i}-#{&1}")), key)
+      else
+        if highlighted == 0 and length(neighbours) > 0 do
+          Enum.reduce(neighbours, socket.assigns.graphemes, &MapSet.put(&2, "#{index}-#{i}-#{&1}"))
+        else
+          if MapSet.member?(socket.assigns.graphemes, key) do
+            MapSet.delete(socket.assigns.graphemes, key)
+          else
+            MapSet.put(socket.assigns.graphemes, key)
+          end
         end
       end)}
   end
@@ -271,8 +297,18 @@ defmodule MkapsWeb.BoardLive do
     parse_graphemes(remaining, [{merged, "underline"} | acc])
   end
 
+  defp parse_graphemes(["(" | rest], acc) do
+    {underlined, remaining} = collect_until(rest, ")", [])
+    merged = Enum.join(underlined)
+    parse_graphemes(remaining, [{merged, nil} | acc])
+  end
+
+  defp parse_graphemes(["|" | rest], acc) do
+    parse_graphemes(rest, acc)
+  end
+
   defp parse_graphemes([char | rest], acc) do
-    if is_ascii_letter_or_digit(char) do
+    if is_ascii_letter_or_digit(char) and false do
         {group, remaining} = collect_while([char | rest], &is_ascii_letter_or_digit/1, [])
         merged = Enum.join(group)
         parse_graphemes(remaining, [{merged, nil} | acc])
