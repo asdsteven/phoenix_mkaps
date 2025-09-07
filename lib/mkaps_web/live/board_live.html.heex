@@ -73,7 +73,7 @@
 <%= if @live_action == :slide do %>
     <div class="w-[1280px] h-[720px] bg-[url(/images/background1.jpg)] bg-cover bg-center relative select-none overflow-hidden">
         <div class="absolute inset-0 bg-zinc-800/90"></div>
-        <div :if={@slide.sentences}
+        <div :if={@slide && @slide.sentences}
              class="flex-none">
             <div class="flex justify-center my-4"
                  :for={{sentence, i} <- Enum.with_index(String.split(@slide.sentences, "\n"))}>
@@ -96,7 +96,7 @@
                 </span>
             </div>
         </div>
-        <div :if={@slide.images}
+        <div :if={@slide && @slide.images}
              class="flex flex-wrap justify-center">
             <img :for={{image, i} <- Enum.with_index(String.split(@slide.images, "\n"))}
                  class={["relative w-auto shadow-sm/100 m-2 rounded-lg mkaps-draggable"]}
@@ -106,8 +106,8 @@
         <div class="absolute bottom-0 left-0 w-full flex justify-center">
             <div class="flex-none join z-9999">
                 <.link :for={slide <- @lesson.slides}
-                       patch={~p"/lessons/#{@lesson.id}/slides/#{@slide.position}"}
-                       class={["join-item btn btn-xs btn-outline", slide.position == @slide.position && "btn-primary"]}>
+                       patch={~p"/lessons/#{@lesson.id}/slides/#{slide.position}"}
+                       class={["join-item btn btn-xs btn-outline", slide.position == @slide_position && "btn-primary"]}>
                     <%= slide.position %>
                 </.link>
             </div>
@@ -131,8 +131,8 @@
             </div>
         </div>
         <div class="absolute bottom-0 right-0 z-9999">
-            <.link class="btn btn-circle btn-outline" patch={~p"/lessons/#{@lesson.id}/slides/#{@slide.position-1}"}>&lt;</.link>
-            <.link class="btn btn-circle btn-outline" patch={~p"/lessons/#{@lesson.id}/slides/#{@slide.position+1}"}>&gt;</.link>
+            <.link class="btn btn-circle btn-outline" patch={~p"/lessons/#{@lesson.id}/slides/#{@slide_position-1}"}>&lt;</.link>
+            <.link class="btn btn-circle btn-outline" patch={~p"/lessons/#{@lesson.id}/slides/#{@slide_position+1}"}>&gt;</.link>
         </div>
     </div>
 <% end %>

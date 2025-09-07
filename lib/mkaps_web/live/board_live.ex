@@ -17,10 +17,12 @@ defmodule MkapsWeb.BoardLive do
 
   def handle_params(%{"lesson_id" => lesson_id, "slide_position" => slide_position}, _uri, socket) do
     lesson = Lesson |> preload(:slides) |> Repo.get!(String.to_integer(lesson_id))
+    position = String.to_integer(slide_position)
     {:noreply,
      socket
      |> assign(lesson: lesson)
-     |> assign(slide: Enum.find(lesson.slides, &(&1.position == String.to_integer(slide_position))))}
+     |> assign(slide: Enum.find(lesson.slides, &(&1.position == position)))
+     |> assign(slide_position: position)}
   end
 
   def handle_params(%{"lesson_id" => lesson_id}, _uri, socket) do
