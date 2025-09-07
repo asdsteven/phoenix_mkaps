@@ -21,7 +21,10 @@ defmodule MkapsWeb.Router do
     get "/file.pdf", FileController, :file
     get "/uploads/:filename", FileController, :image
     live "/file", FileLive
-    live "/", BoardLive
+    live "/", BoardLive, :index
+    live "/lessons", BoardLive, :index
+    live "/lessons/:lesson_id/edit", BoardLive, :edit
+    live "/lessons/:lesson_id/slides/:slide_position", BoardLive, :slide
   end
 
   # Other scopes may use custom stacks.

@@ -25,8 +25,8 @@ Hooks.Draggable = {
       el.style.top = point.clientY - offset.y + "px"
     }
 
-    const toggleGrapheme = (key) => {
-      this.pushEvent("toggle-grapheme", {
+    const toggleHighlight = (key) => {
+      this.pushEvent("toggle-highlight", {
         key: key
       })
     }
@@ -85,7 +85,7 @@ Hooks.Draggable = {
     window.addEventListener("mouseup", (e) => {
       if (![1, 2].includes(isDragging)) return
       if (isDragging == 1) {
-        if (e.target.dataset.key) toggleGrapheme(e.target.dataset.key)
+        if (e.target.dataset.key) toggleHighlight(e.target.dataset.key)
       } else {
         stopDrag()
       }
@@ -96,7 +96,7 @@ Hooks.Draggable = {
       for (const touch of e.changedTouches) {
         if (touches.get(touch.identifier) !== el) continue
         if (isDragging == 11) {
-          toggleGrapheme(e.target.dataset.key)
+          toggleHighlight(e.target.dataset.key)
         } else {
           stopDrag()
         }

@@ -1,86 +1,92 @@
-<%= if @page == :list_lesson do %>
-    <%= for lesson <- @list_lesson do %>
-        <.form for={%{}} phx-submit="save-lesson" phx-change="change-lesson" phx-value-lesson={lesson.id} class="m-2">
-            <span><%= lesson.position %></span>
-            <input type="hidden" name="lesson" value={lesson.id}>
-            <div class="join">
-                <input type="text" class={["join-item input", MapSet.member?(@changed_lessons, lesson.id) && "input-primary"]} name="name" value={lesson.name}>
-                <button type="submit" class={["join-item btn", MapSet.member?(@changed_lessons, lesson.id) && "btn-primary"]}
-                        disabled={!MapSet.member?(@changed_lessons, lesson.id)}>Save</button>
-            </div>
-            <div class="join">
-                <button type="button" class="join-item btn btn-secondary" phx-click="move-lesson" phx-value-lesson={lesson.id}>Move Up</button>
-                <button type="button" class="join-item btn btn-secondary" phx-click="edit-lesson" phx-value-lesson={lesson.id}>Edit</button>
-                <button type="button" class="join-item btn btn-accent" phx-click="play-lesson" phx-value-lesson={lesson.id} phx-value-slide="0">Play</button>
-            </div>
-        </.form>
-    <% end %>
-    <.form for={%{}} phx-submit="create-lesson" phx-change="change-lesson" phx-value-lesson="-1" class="m-2">
+<%= if @live_action == :index do %>
+    <form :for={lesson <- @lessons} phx-submit="save-lesson" phx-change="change-lesson" class="m-2">
+        <span><%= lesson.position %></span>
+        <input type="hidden" name="lesson" value={lesson.id}>
         <div class="join">
-            <input type="text" class={["join-item input", MapSet.member?(@changed_lessons, -1) && "input-primary"]} name="name" placeholder="Lesson name">
-            <button type="submit" class={["join-item btn", MapSet.member?(@changed_lessons, -1) && "btn-primary"]}
-                    disabled={!MapSet.member?(@changed_lessons, -1)}>Create</button>
+            <input class={["join-item input", MapSet.member?(@pending_saves, "lesson-#{lesson.id}") && "input-primary"]}
+                   type="text" name="name" value={lesson.name}>
+            <button class={["join-item btn", MapSet.member?(@pending_saves, "lesson-#{lesson.id}") && "btn-primary"]}
+                    type="submit" disabled={!MapSet.member?(@pending_saves, "lesson-#{lesson.id}")}>Save</button>
         </div>
-    </.form>
+        <div class="join">
+            <button type="button" class="join-item btn btn-secondary" phx-click="move-lesson" phx-value-lesson={lesson.id}>Move Up</button>
+            <.link class="join-item btn btn-secondary" patch={~p"/lessons/#{lesson.id}/edit"}>Edit</.link>
+            <.link class="join-item btn btn-accent" patch={~p"/lessons/#{lesson.id}/slides/1"}>Play</.link>
+        </div>
+    </form>
+    <form phx-submit="create-lesson" phx-change="change-lesson" class="m-2">
+        <input type="hidden" name="lesson" value="create">
+        <div class="join">
+            <input class={["join-item input", MapSet.member?(@pending_saves, "lesson-create") && "input-primary"]}
+                   type="text" name="name" placeholder="Lesson name">
+            <button class={["join-item btn", MapSet.member?(@pending_saves, "lesson-create") && "btn-primary"]}
+                    type="submit" disabled={!MapSet.member?(@pending_saves, "lesson-create")}>Create</button>
+        </div>
+    </form>
 <% end %>
 
-<%= if @page == :edit_lesson do %>
+<%= if @live_action == :edit do %>
     <div class="join m-2">
-        <button class="join-item btn btn-accent" phx-click="play-lesson" phx-value-lesson={@edit_lesson.id} phx-value-slide={@play_index}>Play</button>
-        <button class="join-item btn btn-primary" phx-click="list-lesson">List lesson</button>
+        <.link class="join-item btn btn-primary" patch={~p"/lessons"}>Home</.link>
     </div>
+    <form :for={slide <- @lesson.slides} phx-submit="save-slide" phx-change="change-slide" class="m-2 flex">
+        <span><%= slide.position %></span>
+        <input type="hidden" name="slide" value={slide.id}>
+        <textarea class={["textarea", MapSet.member?(@pending_saves, "slide-#{slide.id}") && "textarea-primary"]}
+                  name="sentences" placeholder="Sentences"><%= slide.sentences %></textarea>
+        <textarea class={["textarea", MapSet.member?(@pending_saves, "slide-#{slide.id}") && "textarea-primary"]}
+                  name="images" placeholder="Images"><%= slide.images %></textarea>
+        <button class={["btn", MapSet.member?(@pending_saves, "slide-#{slide.id}") && "btn-primary"]}
+                type="submit" disabled={!MapSet.member?(@pending_saves, "slide-#{slide.id}")}>Save</button>
+        <div class="join">
+            <button type="button" class="join-item btn btn-secondary" phx-click="move-slide" phx-value-slide={slide.id}>Move</button>
+            <.link class="join-item btn btn-accent" patch={~p"/lessons/#{@lesson.id}/slides/#{slide.position}"}>Play</.link>
+        </div>
+        <div :if={slide.images}>
+            <img :for={image <- String.split(slide.images, "\n")} src={image} class="h-24 w-auto inline m-1">
+        </div>
+    </form>
+    <form phx-submit="create-slide" phx-change="change-slide" class="m-2">
+        <input type="hidden" name="slide" value="create">
+        <textarea class={["textarea", MapSet.member?(@pending_saves, "slide-create") && "textarea-primary"]}
+            name="sentences" placeholder="Sentences"></textarea>
+        <textarea class={["textarea", MapSet.member?(@pending_saves, "slide-create") && "textarea-primary"]}
+            name="images" placeholder="Images"></textarea>
+        <button class={["btn", MapSet.member?(@pending_saves, "slide-create") && "btn-primary"]}
+            type="submit">Create</button>
+    </form>
     <form id="upload-form" phx-submit="save-image" phx-change="validate" class="m-2">
         <.live_file_input upload={@uploads.image} class="file-input file-input-primary" />
         <button type="submit">Upload</button>
         <div>{@progress}</div>
     </form>
-    <%= for {slide, i} <- Enum.with_index(@edit_lesson.slides) do %>
-        <.form for={%{}} phx-submit="save-slide" class="m-2 flex">
-            <span><%= slide.position %></span>
-            <input type="hidden" name="slide" value={slide.id}>
-            <textarea placeholder="Sentences" class="textarea" name="sentences"><%= slide.sentences %></textarea>
-            <textarea placeholder="Images" class="textarea" name="images"><%= slide.images %></textarea>
-            <div class="join">
-                <button type="submit" class="join-item btn btn-primary">Save</button>
-                <button type="button" class="join-item btn btn-secondary" phx-click="move-slide" phx-value-slide={slide.id}>Move</button>
-                <button type="button" class="join-item btn btn-info" phx-click="reset-layout" phx-value-slide={slide.id}>Reset layout</button>
-                <button type="button" class="join-item btn btn-accent" phx-click="play-lesson" phx-value-lesson={@edit_lesson.id} phx-value-slide={i}>Play</button>
-            </div>
-            <div :if={slide.images}>
-                <img :for={image <- String.split(slide.images, "\n")} src={image} class="h-24 w-auto inline m-1">
-            </div>
-        </.form>
-    <% end %>
-    <.form for={%{}}phx-submit="create-slide" class="m-2">
-        <textarea placeholder="Sentences" class="textarea" name="sentences"></textarea>
-        <textarea placeholder="Images" class="textarea" name="images"></textarea>
-        <button type="submit" class="btn btn-primary">Create</button>
-    </.form>
+    <div>Click one of them to copy image link</div>
     <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-         <div :for={image <- @images} class="flex flex-col items-center space-y-2">
-            <span id={"image-#{image}"} phx-hook="CopyOnClick" data-copy-text={"/uploads/#{image}"}><%= image %></span>
+        <div class="flex flex-col items-center space-y-2"
+            :for={image <- @images} phx-hook="CopyOnClick" data-copy-text={"/uploads/#{image}"} id={"image-#{image}"}>
+            <span><%= image %></span>
             <img src={"/uploads/#{image}"} class="w-full max-w-xs max-h-64 object-contain">
         </div>
     </div>
 <% end %>
 
-<%= if @page == :play_lesson do %>
+<%= if @live_action == :slide do %>
     <div class="w-[1280px] h-[720px] bg-[url(/images/background1.jpg)] bg-cover bg-center relative select-none overflow-hidden">
         <div class="absolute inset-0 bg-zinc-800/90"></div>
-        <div :if={@play_lesson && length(@play_lesson.slides) > 0 && Enum.at(@play_lesson.slides, @play_index).sentences}
+        <div :if={@slide.sentences}
              class="flex-none">
-            <div class="flex justify-center my-4" :for={{sentence, i} <- Enum.with_index(String.split(Enum.at(@play_lesson.slides, @play_index).sentences, "\n"))}>
-                <span class={["inline-flex flex-wrap gap-y-8 relative px-4 py-2 rounded-lg bg-stone-100 shadow-sm/100 text-black kai mkaps-draggable",
-                            Enum.at(@font_sizes, Map.get(Enum.at(@play_lesson.slides, @play_index).item_sizes || %{}, "sentence-#{i}", Enum.at(@play_lesson.slides, @play_index).font_size || 11))]}
+            <div class="flex justify-center my-4"
+                 :for={{sentence, i} <- Enum.with_index(String.split(@slide.sentences, "\n"))}>
+                <span class={["inline-flex flex-wrap gap-y-8 relative px-4 py-2 rounded-lg bg-stone-100 shadow-sm/100 text-black kai mkaps-draggable"]}
                       phx-hook="Draggable" id={"sentence-#{i}"}
-                      style={Map.get(Enum.at(@play_lesson.slides, @play_index).item_xyzs || %{}, "sentence-#{i}", "left:0px;top:0px;z-index:0")}>
+                      style={Map.get(@slide.item_xyzs || %{}, "sentence-#{i}", "left:0px;top:0px;z-index:0")}>
                     <span :for={{{grapheme, deco}, j} <- Enum.with_index(graphemes(sentence))}
                           class={["inline-block",
-                               MapSet.member?(@graphemes, "#{@play_index}-#{i}-#{j}") && "text-violet-900 bg-violet-200",
-                               !MapSet.member?(@graphemes, "#{@play_index}-#{i}-#{j-1}") && "rounded-l-md",
-                               !MapSet.member?(@graphemes, "#{@play_index}-#{i}-#{j+1}") && "rounded-r-md",
+                               MapSet.member?(@highlights, "#{@slide.id}-#{i}-#{j}") && "text-violet-900 bg-violet-200",
+                               !MapSet.member?(@highlights, "#{@slide.id}-#{i}-#{j-1}") && "rounded-l-md",
+                               !MapSet.member?(@highlights, "#{@slide.id}-#{i}-#{j+1}") && "rounded-r-md",
                                deco == "underline" && "underline underline-offset-[0.15em]"]}
-                          data-key={"#{@play_index}-#{i}-#{j}"}>
+                          data-key={"#{@slide.id}-#{i}-#{j}"}>
                         <%= if grapheme == " " do %>
                             &nbsp;
                         <% else %>
@@ -90,22 +96,20 @@
                 </span>
             </div>
         </div>
-        <div :if={@play_lesson && length(@play_lesson.slides) > 0 && Enum.at(@play_lesson.slides, @play_index).images}
+        <div :if={@slide.images}
              class="flex flex-wrap justify-center">
-            <img :for={{image, i} <- Enum.with_index(String.split(Enum.at(@play_lesson.slides, @play_index).images, "\n"))}
-                 class={["relative mkaps-draggable w-auto shadow-sm/100 m-2 rounded-lg",
-                      Enum.at(@image_sizes, Map.get(Enum.at(@play_lesson.slides, @play_index).item_sizes || %{}, "image-#{i}", Enum.at(@play_lesson.slides, @play_index).image_size || 9))]}
+            <img :for={{image, i} <- Enum.with_index(String.split(@slide.images, "\n"))}
+                 class={["relative w-auto shadow-sm/100 m-2 rounded-lg mkaps-draggable"]}
                  src={image} phx-hook="Draggable" id={"image-#{i}"} draggable="false"
-                 style={Map.get(Enum.at(@play_lesson.slides, @play_index).item_xyzs || %{}, "image-#{i}", "left:0px;top:0px;z-index:0")}>
+                 style={Map.get(@slide.item_xyzs || %{}, "image-#{i}", "left:0px;top:0px;z-index:0")}>
         </div>
         <div class="absolute bottom-0 left-0 w-full flex justify-center">
             <div class="flex-none join z-9999">
-                <button :for={{_slide, i} <- Enum.with_index(@play_lesson.slides)}
-                        phx-click="set-slide"
-                        phx-value-slide={i}
-                        class={["join-item btn btn-xs btn-outline", i == @play_index && "btn-primary"]}>
-                    <%= i+1 %>
-                </button>
+                <.link :for={slide <- @lesson.slides}
+                       patch={~p"/lessons/#{@lesson.id}/slides/#{@slide.position}"}
+                       class={["join-item btn btn-xs btn-outline", slide.position == @slide.position && "btn-primary"]}>
+                    <%= slide.position %>
+                </.link>
             </div>
         </div>
         <div class="absolute bottom-0 left-0 flex flex-col z-9999">
@@ -122,14 +126,13 @@
                 <button class="join-item btn btn-sm btn-outline kai" phx-click="image-larger">圖大</button>
             </div>
             <div class="join">
-                <button class="join-item btn btn-sm btn-outline kai" phx-click="edit-lesson" phx-value-lesson={@play_lesson.id}>編輯</button>
+                <.link patch={~p"/lessons/#{@lesson.id}/edit"} class="join-item btn btn-sm btn-outline kai">編輯</.link>
                 <button class="join-item btn btn-sm btn-outline kai" phx-hook="FullScreen" id="fullscreen">全屏</button>
             </div>
         </div>
         <div class="absolute bottom-0 right-0 z-9999">
-            <button class="btn btn-circle btn-outline" phx-click="prev-slide">&lt;</button>
-            <button class="btn btn-circle btn-outline" phx-click="next-slide">&gt;</button>
+            <.link class="btn btn-circle btn-outline" patch={~p"/lessons/#{@lesson.id}/slides/#{@slide.position-1}"}>&lt;</.link>
+            <.link class="btn btn-circle btn-outline" patch={~p"/lessons/#{@lesson.id}/slides/#{@slide.position+1}"}>&gt;</.link>
         </div>
     </div>
 <% end %>
-

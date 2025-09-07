@@ -1,176 +1,139 @@
 defmodule MkapsWeb.BoardLive do
   use MkapsWeb, :live_view
-  import Ecto.Query, only: [from: 2]
+  import Ecto.Query, only: [order_by: 2, preload: 2, where: 2, where: 3, last: 2]
   alias Mkaps.Lesson
   alias Mkaps.Slide
   alias Mkaps.Repo
 
-  @font_sizes ["text-xs", "text-sm", "text-base", "text-lg", "text-xl", "text-2xl", "text-3xl", "text-4xl", "text-5xl", "text-6xl", "text-7xl", "text-8xl", "text-9xl"]
-  @image_sizes ["h-10", "h-20", "h-30", "h-40", "h-50", "h-60", "h-70", "h-80", "h-90", "h-100", "h-110", "h-120", "h-150", "h-200"]
-
   def mount(_params, _session, socket) do
-    lesson = Repo.one(from lesson in Lesson, order_by: lesson.position, limit: 1) |> Repo.preload(slides: from(s in Slide, order_by: s.position))
-    {:ok, assign(socket, page: :play_lesson, play_lesson: lesson, play_index: 0, play_menu: false)
-    |> assign(font_sizes: @font_sizes, image_sizes: @image_sizes)
-    |> assign(graphemes: MapSet.new())
-    |> assign(changed_lessons: MapSet.new())
-    |> allow_upload(:image,
+    {:ok,
+     socket
+     |> assign(highlights: MapSet.new())
+     |> allow_upload(:image,
      accept: :any,
      max_file_size: 1_000_000_000,
-     progress: fn :image, entry, socket ->
-       {:noreply, assign(socket, progress: entry.progress)}
-     end
-     )}
-
+     progress: fn :image, entry, socket -> {:noreply, assign(socket, progress: entry.progress)} end)}
   end
 
-  def handle_event("list-lesson", _params, socket) do
-    {:noreply, assign(socket, page: :list_lesson, list_lesson: Repo.all(from l in Lesson, order_by: l.position))}
+  def handle_params(%{"lesson_id" => lesson_id, "slide_position" => slide_position}, _uri, socket) do
+    lesson = Lesson |> preload(:slides) |> Repo.get!(String.to_integer(lesson_id))
+    {:noreply,
+     socket
+     |> assign(lesson: lesson)
+     |> assign(slide: Enum.find(lesson.slides, &(&1.position == String.to_integer(slide_position))))}
+  end
+
+  def handle_params(%{"lesson_id" => lesson_id}, _uri, socket) do
+    images = Application.fetch_env!(:mkaps, MkapsWeb.FileLive)[:uploads_path]
+    |> File.ls!
+    |> Enum.filter(fn file ->
+      ext = file |> Path.extname |> String.downcase
+      ext in [".jpg", ".jpeg", ".png", ".gif", ".webp"]
+    end)
+    {:noreply,
+     socket
+     |> assign(lesson: Lesson |> preload(:slides) |> Repo.get!(String.to_integer(lesson_id)))
+     |> assign(pending_saves: MapSet.new())
+     |> assign(progress: 0, images: images)}
+  end
+
+  def handle_params(_params, _uri, socket) do
+    {:noreply,
+     socket
+     |> assign(lessons: Lesson |> order_by(:position) |> Repo.all)
+     |> assign(pending_saves: MapSet.new())}
   end
 
   def handle_event("change-lesson", %{"lesson" => lesson_id}, socket) do
-    {:noreply, assign(socket, changed_lessons: MapSet.put(socket.assigns.changed_lessons, String.to_integer(lesson_id)))}
-  end
-
-  def handle_event("save-lesson", %{"lesson" => lesson_id, "name" => name}, socket) do
-    lesson = Repo.get!(Lesson, String.to_integer(lesson_id))
-    Lesson.changeset(lesson, %{name: name}) |> Repo.update()
-    {:noreply, assign(socket,
-        changed_lessons: MapSet.delete(socket.assigns.changed_lessons, String.to_integer(lesson_id)),
-        list_lesson: Repo.all(from l in Lesson, order_by: l.position))}
-  end
-
-  def handle_event("create-lesson", %{"name" => name}, socket) do
-    max_pos =
-      from(l in Lesson, select: max(l.position))
-      |> Repo.one()
-
-    next_pos = (max_pos || -1) + 1
-
-    changeset =
-      %Lesson{}
-      |> Lesson.changeset(%{name: name, position: next_pos})
-    Repo.insert!(changeset)
-    {:noreply, assign(socket, list_lesson: Repo.all(from l in Lesson, order_by: l.position))}
+    {:noreply,
+     socket
+     |> assign(pending_saves: MapSet.put(socket.assigns.pending_saves, "lesson-#{lesson_id}"))}
   end
 
   def handle_event("move-lesson", %{"lesson" => lesson_id}, socket) do
-    Repo.transaction(fn ->
-      pos = Repo.get!(Lesson, String.to_integer(lesson_id)).position
-
-      # Find the previous row
-      prev =
-        from(l in Lesson,
-          where: l.position == ^(pos - 1)
-        )
-        |> Repo.one!()
-
-      # Swap positions
-      Repo.update_all(
-        from(l in Lesson, where: l.id == ^prev.id),
-        set: [position: pos]
-      )
-
-      Repo.update_all(
-        from(l in Lesson, where: l.id == ^lesson_id),
-        set: [position: pos - 1]
-      )
+    {:ok, _} = Repo.transact(fn ->
+      lesson = Lesson |> Repo.get!(String.to_integer(lesson_id))
+      lesson_prev = Lesson |> where([l], l.position < ^lesson.position) |> last(:position) |> Repo.one!
+      lesson |> Lesson.changeset(%{position: lesson_prev.position}) |> Repo.update!
+      lesson_prev |> Lesson.changeset(%{position: lesson.position}) |> Repo.update!
+      {:ok, nil}
     end)
-    {:noreply, assign(socket, list_lesson: Repo.all(from l in Lesson, order_by: l.position))}
+    {:noreply,
+     socket
+     |> assign(lessons: Lesson |> order_by(:position) |> Repo.all)}
   end
 
-  def handle_event("edit-lesson", %{"lesson" => lesson_id}, socket) do
-    uploads_path = Application.fetch_env!(:mkaps, MkapsWeb.FileLive)[:uploads_path]
-    images = File.ls!(uploads_path)
-    |> Enum.filter(fn file ->
-      ext = file |> Path.extname() |> String.downcase()
-      ext in [".jpg", ".jpeg", ".png", ".gif", ".webp"]
-    end)
-
-    lesson = Repo.get!(Lesson, String.to_integer(lesson_id)) |> Repo.preload(slides: from(s in Slide, order_by: s.position))
-    {:noreply, assign(socket, page: :edit_lesson, edit_lesson: lesson, progress: 0, images: images)}
+  def handle_event("create-lesson", %{"name" => name}, socket) do
+    max_pos = Lesson |> Repo.aggregate(:max, :position)
+    %Lesson{} |> Lesson.changeset(%{name: name, position: max_pos+1}) |> Repo.insert!
+    {:noreply,
+     socket
+     |> assign(lessons: Lesson |> order_by(:position) |> Repo.all)
+     |> assign(pending_saves: MapSet.delete(socket.assigns.pending_saves, "lesson-create"))}
   end
 
-  def handle_event("save-slide", %{"slide" => slide_id, "sentences" => sentences, "images" => images}, socket) do
-    slide = Repo.get!(Slide, String.to_integer(slide_id))
-    Slide.changeset(slide, %{sentences: sentences, images: images}) |> Repo.update()
-
-    lesson = Repo.get!(Lesson, socket.assigns.edit_lesson.id) |> Repo.preload(slides: from(s in Slide, order_by: s.position))
-    {:noreply, assign(socket, edit_lesson: lesson)}
+  def handle_event("save-lesson", %{"lesson" => lesson_id, "name" => name}, socket) do
+    lesson = Lesson |> Repo.get!(String.to_integer(lesson_id))
+    lesson |> Lesson.changeset(%{name: name}) |> Repo.update!
+    {:noreply,
+     socket
+     |> assign(lessons: Lesson |> order_by(:position) |> Repo.all)
+     |> assign(pending_saves: MapSet.delete(socket.assigns.pending_saves, "lesson-#{lesson_id}"))}
   end
 
-  def handle_event("create-slide", %{"sentences" => sentences, "images" => images}, socket) do
-    max_pos =
-      from(s in Slide, where: s.lesson_id == ^socket.assigns.edit_lesson.id, select: max(s.position))
-      |> Repo.one()
-
-    next_pos = (max_pos || -1) + 1
-
-    changeset =
-      %Slide{}
-      |> Slide.changeset(%{sentences: sentences, images: images, position: next_pos, lesson_id: socket.assigns.edit_lesson.id})
-    Repo.insert!(changeset)
-
-    lesson = Repo.get!(Lesson, socket.assigns.edit_lesson.id) |> Repo.preload(slides: from(s in Slide, order_by: s.position))
-    {:noreply, assign(socket, edit_lesson: lesson)}
-  end
-
-  def handle_event("reset-layout", %{"slide" => slide_id}, socket) do
-    slide = Repo.get!(Slide, slide_id)
-    Slide.changeset(slide, %{item_xyzs: %{}, item_sizes: %{}}) |> Repo.update()
-
-    lesson = Repo.get!(Lesson, socket.assigns.play_lesson.id) |> Repo.preload(slides: from(s in Slide, order_by: s.position))
-    {:noreply, assign(socket, play_lesson: lesson)}
+  def handle_event("change-slide", %{"slide" => slide_id}, socket) do
+    {:noreply,
+     socket
+     |> assign(pending_saves: MapSet.put(socket.assigns.pending_saves, "slide-#{slide_id}"))}
   end
 
   def handle_event("move-slide", %{"slide" => slide_id}, socket) do
-    Repo.transaction(fn ->
-      pos = Repo.get!(Slide, String.to_integer(slide_id)).position
-
-      # Find the previous row
-      prev =
-        from(s in Slide,
-          where: s.position == ^(pos - 1) and s.lesson_id == ^socket.assigns.edit_lesson.id
-        )
-        |> Repo.one!()
-
-      # Swap positions
-      Repo.update_all(
-        from(s in Slide, where: s.id == ^prev.id),
-        set: [position: pos]
-      )
-
-      Repo.update_all(
-        from(s in Slide, where: s.id == ^slide_id),
-        set: [position: pos - 1]
-      )
+    {:ok, _} = Repo.transact(fn ->
+      slide = Slide |> Repo.get!(String.to_integer(slide_id))
+      slide_prev = Slide |> where(lesson_id: ^slide.lesson_id) |> where([s], s.position < ^slide.position) |> last(:position) |> Repo.one!
+      slide |> Slide.changeset(%{position: slide_prev.position}) |> Repo.update!
+      slide_prev |> Slide.changeset(%{position: slide.position}) |> Repo.update!
+      {:ok, nil}
     end)
-    lesson = Repo.get!(Lesson, socket.assigns.edit_lesson.id) |> Repo.preload(slides: from(s in Slide, order_by: s.position))
-    {:noreply, assign(socket, edit_lesson: lesson)}
+    {:noreply,
+     socket
+     |> assign(lesson: Lesson |> preload(:slides) |> Repo.get!(socket.assigns.lesson.id))}
   end
 
-  def handle_event("play-lesson", %{"lesson" => lesson_id, "slide" => play_index}, socket) do
-    lesson = Repo.get!(Lesson, String.to_integer(lesson_id)) |> Repo.preload(slides: from(s in Slide, order_by: s.position))
-    {:noreply, assign(socket, page: :play_lesson, play_lesson: lesson, play_index: String.to_integer(play_index), play_menu: false, graphemes: MapSet.new())}
+  def handle_event("create-slide", %{"sentences" => sentences, "images" => images}, socket) do
+    lesson_id = socket.assigns.lesson.id
+    max_pos = Slide |> where(lesson_id: ^lesson_id) |> Repo.aggregate(:max, :position)
+    %Slide{} |> Slide.changeset(%{sentences: sentences, images: images, position: (max_pos || 0)+1, lesson_id: lesson_id}) |> Repo.insert!
+    {:noreply,
+     socket
+     |> assign(lesson: Lesson |> preload(:slides) |> Repo.get!(lesson_id))
+     |> assign(pending_saves: MapSet.delete(socket.assigns.pending_saves, "slide-create"))}
   end
 
-  def handle_event("play-menu", _params, socket) do
-    {:noreply, update(socket, :play_menu, &(!&1))}
+  def handle_event("save-slide", %{"slide" => slide_id, "sentences" => sentences, "images" => images}, socket) do
+    slide = Slide |> Repo.get!(String.to_integer(slide_id))
+    slide |> Slide.changeset(%{sentences: sentences, images: images}) |> Repo.update!
+    {:noreply,
+     socket
+     |> assign(lesson: Lesson |> preload(:slides) |> Repo.get!(slide.lesson_id))
+     |> assign(pending_saves: MapSet.delete(socket.assigns.pending_saves, "slide-#{slide_id}"))}
   end
 
   def handle_event("drag", %{"item" => item_id, "x" => x, "y" => y, "z" => z}, socket) do
-    slide = Enum.at(socket.assigns.play_lesson.slides, socket.assigns.play_index)
-    Slide.changeset(slide, %{item_xyzs: Map.put(slide.item_xyzs || %{}, item_id, "left: #{x}px; top: #{y}px; z-index: #{z}")}) |> Repo.update()
-
-    lesson = Repo.get!(Lesson, socket.assigns.play_lesson.id) |> Repo.preload(slides: from(s in Slide, order_by: s.position))
-    {:noreply, assign(socket, play_lesson: lesson, last_item_id: item_id)}
+    item_xyzs = Map.put(socket.assigns.slide.item_xyzs || %{}, item_id, "left: #{x}px; top: #{y}px; z-index: #{z}")
+    socket.assigns.slide |> Slide.changeset(%{item_xyzs: item_xyzs}) |> Repo.update!
+    lesson = Lesson |> preload(:slides) |> Repo.get!(socket.assigns.lesson.id)
+    {:noreply,
+     socket
+     |> assign(lesson: lesson)
+     |> assign(slide: Enum.find(lesson.slides, &(&1.position == socket.assigns.slide.position)))}
   end
 
-  def handle_event("toggle-grapheme", %{"key" => key}, socket) do
-    [index, i, j] = String.split(key, "-")
-    slide = Enum.at(socket.assigns.play_lesson.slides, socket.assigns.play_index)
+  def handle_event("toggle-highlight", %{"key" => key}, socket) do
+    [_slide_id, i, j] = String.split(key, "-")
+    slide = socket.assigns.slide
     sentence = Enum.at(String.split(slide.sentences, "\n"), String.to_integer(i))
-    {belongs_here, acc} = Enum.reduce(Enum.with_index(graphemes(sentence)), {0, []}, fn {{grapheme, _}, k}, {belongs_here, acc} ->
+    {belongs_here, acc} = Enum.reduce(Enum.with_index(graphemes(sentence)), {0, []}, fn {{grapheme, _deco}, k}, {belongs_here, acc} ->
       if belongs_here == 2 do
         {2, acc}
       else
@@ -186,89 +149,24 @@ defmodule MkapsWeb.BoardLive do
       end
     end)
     neighbours = if belongs_here == 0, do: [], else: acc
-    highlighted = Enum.count(neighbours, &MapSet.member?(socket.assigns.graphemes, "#{index}-#{i}-#{&1}"))
-    {:noreply, assign(socket, :graphemes,
-      if highlighted > 0 and highlighted == length(neighbours) do
-        MapSet.put(Enum.reduce(neighbours, socket.assigns.graphemes, &MapSet.delete(&2, "#{index}-#{i}-#{&1}")), key)
+    highlight_count = Enum.count(neighbours, &MapSet.member?(socket.assigns.highlights, "#{slide.id}-#{i}-#{&1}"))
+    highlights =
+    if highlight_count > 0 and highlight_count == length(neighbours) do
+      MapSet.put(Enum.reduce(neighbours, socket.assigns.highlights, &MapSet.delete(&2, "#{slide.id}-#{i}-#{&1}")), key)
+    else
+      if highlight_count == 0 and length(neighbours) > 0 do
+        Enum.reduce(neighbours, socket.assigns.highlights, &MapSet.put(&2, "#{slide.id}-#{i}-#{&1}"))
       else
-        if highlighted == 0 and length(neighbours) > 0 do
-          Enum.reduce(neighbours, socket.assigns.graphemes, &MapSet.put(&2, "#{index}-#{i}-#{&1}"))
+        if MapSet.member?(socket.assigns.highlights, key) do
+          MapSet.delete(socket.assigns.highlights, key)
         else
-          if MapSet.member?(socket.assigns.graphemes, key) do
-            MapSet.delete(socket.assigns.graphemes, key)
-          else
-            MapSet.put(socket.assigns.graphemes, key)
-          end
+          MapSet.put(socket.assigns.highlights, key)
         end
-      end)}
-  end
-
-  def handle_event("set-slide", %{"slide" => slide_index}, socket) do
-    {:noreply, assign(socket, :play_index, String.to_integer(slide_index))}
-  end
-
-  def handle_event("prev-slide", _params, socket) do
-    {:noreply, update(socket, :play_index, &max(&1 - 1, 0))}
-  end
-
-  def handle_event("next-slide", _params, socket) do
-    {:noreply, update(socket, :play_index, &min(&1 + 1, length(socket.assigns.play_lesson.slides) - 1))}
-  end
-
-  def handle_event("item-smaller", _params, socket) do
-    slide = Enum.at(socket.assigns.play_lesson.slides, socket.assigns.play_index)
-    if String.starts_with?(socket.assigns.last_item_id, "sentence") do
-      Slide.changeset(slide, %{item_sizes: Map.update(slide.item_sizes || %{}, socket.assigns.last_item_id, 11, &(max(&1 - 1, 0)))}) |> Repo.update()
-    else
-      Slide.changeset(slide, %{item_sizes: Map.update(slide.item_sizes || %{}, socket.assigns.last_item_id, 9, &(max(&1 - 1, 2)))}) |> Repo.update()
+      end
     end
-
-    lesson = Repo.get!(Lesson, socket.assigns.play_lesson.id) |> Repo.preload(slides: from(s in Slide, order_by: s.position))
-    {:noreply, assign(socket, play_lesson: lesson)}
-  end
-
-  def handle_event("item-larger", _params, socket) do
-    slide = Enum.at(socket.assigns.play_lesson.slides, socket.assigns.play_index)
-    if String.starts_with?(socket.assigns.last_item_id, "sentence") do
-      Slide.changeset(slide, %{item_sizes: Map.update(slide.item_sizes || %{}, socket.assigns.last_item_id, 11, &(min(&1 + 1, length(@font_sizes))))}) |> Repo.update()
-    else
-      Slide.changeset(slide, %{item_sizes: Map.update(slide.item_sizes || %{}, socket.assigns.last_item_id, 9, &(min(&1 + 1, length(@image_sizes))))}) |> Repo.update()
-    end
-
-    lesson = Repo.get!(Lesson, socket.assigns.play_lesson.id) |> Repo.preload(slides: from(s in Slide, order_by: s.position))
-    {:noreply, assign(socket, play_lesson: lesson)}
-  end
-
-  def handle_event("font-smaller", _params, socket) do
-    slide = Enum.at(socket.assigns.play_lesson.slides, socket.assigns.play_index)
-    Slide.changeset(slide, %{font_size: max((slide.font_size || 11) - 1, 0)}) |> Repo.update()
-
-    lesson = Repo.get!(Lesson, socket.assigns.play_lesson.id) |> Repo.preload(slides: from(s in Slide, order_by: s.position))
-    {:noreply, assign(socket, play_lesson: lesson)}
-  end
-
-  def handle_event("font-larger", _params, socket) do
-    slide = Enum.at(socket.assigns.play_lesson.slides, socket.assigns.play_index)
-    Slide.changeset(slide, %{font_size: min((slide.font_size || 11) + 1, length(@font_sizes))}) |> Repo.update()
-
-    lesson = Repo.get!(Lesson, socket.assigns.play_lesson.id) |> Repo.preload(slides: from(s in Slide, order_by: s.position))
-    {:noreply, assign(socket, play_lesson: lesson)}
-  end
-
-  def handle_event("image-smaller", _params, socket) do
-    slide = Enum.at(socket.assigns.play_lesson.slides, socket.assigns.play_index)
-    Slide.changeset(slide, %{image_size: max((slide.image_size || 9) - 1, 2)}) |> Repo.update()
-
-    lesson = Repo.get!(Lesson, socket.assigns.play_lesson.id) |> Repo.preload(slides: from(s in Slide, order_by: s.position))
-    {:noreply, assign(socket, play_lesson: lesson)}
-  end
-
-  def handle_event("image-larger", _params, socket) do
-    slide = Enum.at(socket.assigns.play_lesson.slides, socket.assigns.play_index)
-    Slide.changeset(slide, %{image_size: min((slide.image_size || 9) + 1, length(@image_sizes))}) |> Repo.update()
-
-    lesson = Repo.get!(Lesson, socket.assigns.play_lesson.id) |> Repo.preload(slides: from(s in Slide, order_by: s.position))
-    {:noreply, assign(socket, play_lesson: lesson)}
+    {:noreply,
+     socket
+     |> assign(highlights: highlights)}
   end
 
   def handle_event("validate", _params, socket) do

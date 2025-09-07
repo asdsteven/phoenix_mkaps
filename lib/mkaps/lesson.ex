@@ -5,7 +5,7 @@ defmodule Mkaps.Lesson do
   schema "lessons" do
     field :name, :string
     field :position, :integer
-    has_many :slides, Mkaps.Slide
+    has_many :slides, Mkaps.Slide, preload_order: [asc: :position]
     timestamps(type: :utc_datetime)
   end
 
