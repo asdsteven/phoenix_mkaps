@@ -194,7 +194,6 @@ Hooks.Touchable = {
       for (const touch of e.changedTouches) {
         if (!el.contains(touch.target)) continue
         if (el.id == 'background' && !backgroundActive()) continue
-        e.preventDefault()
         touchStart(touch.identifier, touch)
       }
     }, { passive: false })
