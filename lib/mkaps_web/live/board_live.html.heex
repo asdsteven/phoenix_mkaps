@@ -76,7 +76,7 @@
          phx-hook="Touchable" id="background" data-toggle-sentences={@toggle_sentences} data-toggle-images={@toggle_images}>
         <div class="absolute inset-0 bg-zinc-800/90 pointer-events-none"></div>
         <%= if @slide && @slide.sentences do %>
-            <span class={["absolute px-[0.5em] py-[0.1em] rounded-lg bg-stone-100 shadow-sm/100 text-black leading-[1.1] kai cursor-grab mkaps-touch-drag mkaps-sentence"]}
+            <span class={["absolute px-[0.4em] py-[0.1em] rounded-lg bg-stone-100 shadow-sm/100 text-black leading-[1.1] kai cursor-grab mkaps-touch-drag mkaps-sentence"]}
                   phx-hook="Touchable" id={"sentence-#{i}"}
                   style={get_xyz(@slide.item_xyzs, "sentence-#{i}") <> ";" <> get_font_size(@slide.item_sizes, "sentence-#{i}")}
                   :for={{sentence, i} <- Enum.with_index(String.split(@slide.sentences, "\n"))}>

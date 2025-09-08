@@ -79,7 +79,8 @@ Hooks.Touchable = {
       t.moved ||= Math.abs(t.y - t.origin.y) >= 10
       if (!moved && t.moved && el.matches('.mkaps-touch-drag')) {
         // quite unpredictable, but efficient
-        const allZ = Array.from(document.querySelectorAll('.mkaps-touch-drag')).map(e => e.style.zIndex);
+        const allZ = Array.from(document.querySelectorAll('.mkaps-touch-drag'))
+                          .filter(e => e !== el).map(e => parseInt(e.style.zIndex, 10))
         el.style.zIndex = Math.max(...allZ) + 1
       }
       return t.moved && t.isMain
@@ -182,6 +183,30 @@ Hooks.Touchable = {
     }
 
     const inset = (el) => {
+      let z = el.style.zIndex
+      const rect = el.getBoundingClientRect()
+      for (const e of document.querySelectorAll('.mkaps-touch-drag')) {
+        if (e === el) continue
+        const r = e.getBoundingClientRect()
+        if (rect.width < r.width / 2 || rect.height < r.height / 2) continue
+        if (rect.right < r.left + r.width / 2 || rect.left > r.left + r.width / 2) continue
+        if (rect.bottom < r.top + r.height / 2 || rect.top > r.top + r.height / 2) continue
+        z = Math.min(z, parseInt(e.style.zIndex, 10))
+      }
+      for (const e of document.querySelectorAll('.mkaps-touch-drag')) {
+        if (e === el) continue
+        if (parseInt(e.style.zIndex, 10) >= z) {
+          e.style.zIndex = parseInt(e.style.zIndex, 10) + 1
+          this.pushEvent("drag", {
+            item: e.id,
+            x: parseInt(e.style.left, 10),
+            y: parseInt(e.style.top, 10),
+            z: parseInt(e.style.zIndex, 10),
+            size: getSize(e)
+          })
+        }
+      }
+      el.style.zIndex = z
       this.pushEvent("drag", {
         item: el.id,
         x: parseInt(el.style.left, 10),

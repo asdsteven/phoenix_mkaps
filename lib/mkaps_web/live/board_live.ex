@@ -149,7 +149,6 @@ defmodule MkapsWeb.BoardLive do
   def handle_event("reset", _params, socket) do
     socket.assigns.slide |> Slide.changeset(%{item_xyzs: nil}) |> Repo.update!
     socket.assigns.slide |> Slide.changeset(%{item_sizes: nil}) |> Repo.update!
-    {:noreply, assign(socket, toggle_images: !socket.assigns.toggle_images)}
     lesson = Lesson |> preload(:slides) |> Repo.get!(socket.assigns.lesson.id)
     {:noreply,
      socket
