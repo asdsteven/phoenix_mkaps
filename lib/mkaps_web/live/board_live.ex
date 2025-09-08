@@ -9,6 +9,8 @@ defmodule MkapsWeb.BoardLive do
     {:ok,
      socket
      |> assign(highlights: MapSet.new())
+     |> assign(toggle_sentences: false)
+     |> assign(toggle_images: false)
      |> allow_upload(:image,
      accept: :any,
      max_file_size: 1_000_000_000,
@@ -121,8 +123,31 @@ defmodule MkapsWeb.BoardLive do
      |> assign(pending_saves: MapSet.delete(socket.assigns.pending_saves, "slide-#{slide_id}"))}
   end
 
+  def handle_event("validate", _params, socket) do
+    {:noreply, socket}
+  end
+
+  def handle_event("save-image", _params, socket) do
+    consume_uploaded_entries(socket, :image, fn %{path: path}, entry ->
+      random_name = Ecto.UUID.generate() <> Path.extname(entry.client_name)
+      uploads_path = Application.fetch_env!(:mkaps, MkapsWeb.FileLive)[:uploads_path]
+      dest = Path.join(uploads_path, random_name)
+      File.cp!(path, dest)
+      {:ok, nil}
+    end)
+    {:noreply, socket}
+  end
+
+  def handle_event("toggle-sentences", _params, socket) do
+    {:noreply, assign(socket, toggle_sentences: !socket.assigns.toggle_sentences)}
+  end
+
+  def handle_event("toggle-images", _params, socket) do
+    {:noreply, assign(socket, toggle_images: !socket.assigns.toggle_images)}
+  end
+
   def handle_event("drag", %{"item" => item_id, "x" => x, "y" => y, "z" => z}, socket) do
-    item_xyzs = Map.put(socket.assigns.slide.item_xyzs || %{}, item_id, "left: #{x}px; top: #{y}px; z-index: #{z}")
+    item_xyzs = Map.put(socket.assigns.slide.item_xyzs || %{}, item_id, [x,y,z])
     socket.assigns.slide |> Slide.changeset(%{item_xyzs: item_xyzs}) |> Repo.update!
     lesson = Lesson |> preload(:slides) |> Repo.get!(socket.assigns.lesson.id)
     {:noreply,
@@ -171,19 +196,12 @@ defmodule MkapsWeb.BoardLive do
      |> assign(highlights: highlights)}
   end
 
-  def handle_event("validate", _params, socket) do
-    {:noreply, socket}
-  end
-
-  def handle_event("save-image", _params, socket) do
-    consume_uploaded_entries(socket, :image, fn %{path: path}, entry ->
-      random_name = Ecto.UUID.generate() <> Path.extname(entry.client_name)
-      uploads_path = Application.fetch_env!(:mkaps, MkapsWeb.FileLive)[:uploads_path]
-      dest = Path.join(uploads_path, random_name)
-      File.cp!(path, dest)
-      {:ok, nil}
-    end)
-    {:noreply, socket}
+  defp get_xyz(item_xyzs, id) do
+    [x,y,z] = case Map.get(item_xyzs || %{}, id, [0,0,0]) do
+                [x,y,z] -> [x,y,z]
+                _ -> [0,0,0]
+              end
+    "left:#{x}px;top:#{y}px;z-index:#{z}"
   end
 
   defp graphemes(s) do

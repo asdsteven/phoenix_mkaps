@@ -71,13 +71,14 @@
 <% end %>
 
 <%= if @live_action == :slide do %>
-    <div class="w-[1280px] h-[720px] bg-[url(/images/background1.jpg)] bg-cover bg-center relative select-none overflow-hidden"
-          id="background">
+    <div class={["w-[1280px] h-[720px] bg-[url(/images/background1.jpg)] bg-cover bg-center relative select-none overflow-hidden",
+               (@toggle_sentences || @toggle_images) && "cursor-grab"]}
+         phx-hook="Touchable" id="background" data-toggle-sentences={@toggle_sentences} data-toggle-images={@toggle_images}>
         <div class="absolute inset-0 bg-zinc-800/90 pointer-events-none"></div>
         <%= if @slide && @slide.sentences do %>
-            <span class={["absolute px-4 py-2 rounded-lg bg-stone-100 shadow-sm/100 text-black kai mkaps-touch-drag"]}
+            <span class={["absolute px-[0.5em] py-[0.1em] rounded-lg bg-stone-100 shadow-sm/100 text-black kai cursor-grab mkaps-touch-drag mkaps-sentence"]}
                   phx-hook="Touchable" id={"sentence-#{i}"}
-                  style={Map.get(@slide.item_xyzs || %{}, "sentence-#{i}", "left:0px;top:0px;z-index:0")}
+                  style={get_xyz(@slide.item_xyzs, "sentence-#{i}")}
                   :for={{sentence, i} <- Enum.with_index(String.split(@slide.sentences, "\n"))}>
                 <span :for={{{grapheme, deco}, j} <- Enum.with_index(graphemes(sentence))}
                       phx-hook="Touchable" id={"#{@slide.id}-#{i}-#{j}"}
@@ -96,11 +97,11 @@
         <% end %>
         <%= if @slide && @slide.images do %>
             <img :for={{image, i} <- Enum.with_index(String.split(@slide.images, "\n"))}
-                 class={["absolute w-auto shadow-sm/100 m-2 rounded-lg mkaps-touch-drag mkaps-touch-rotate"]}
+                 class={["absolute w-auto shadow-sm/100 rounded-lg cursor-grab mkaps-touch-drag mkaps-image"]}
                  src={image} phx-hook="Touchable" id={"image-#{i}"} draggable="false"
-                 style={Map.get(@slide.item_xyzs || %{}, "image-#{i}", "left:0px;top:0px;z-index:0")}>
+                 style={get_xyz(@slide.item_xyzs, "image-#{i}")}>
         <% end %>
-        <div class="fixed bottom-0 left-1/2 transform -translate-x-1/2 join flex justify-center z-9999" id="ui-bottom">
+        <div class="fixed bottom-0 left-1/2 transform -translate-x-1/2 join z-9999" id="ui-bottom">
             <.link :for={slide <- @lesson.slides}
                    patch={~p"/lessons/#{@lesson.id}/slides/#{slide.position}"}
                    class={["join-item btn btn-xs btn-outline", slide.position == @slide_position && "btn-primary"]}>
@@ -110,8 +111,10 @@
         <div class="fixed bottom-0 left-0 flex flex-col z-9999" id="ui-left">
             <button class="btn btn-sm btn-outline kai" phx-click="draw">繪畫</button>
             <div class="join">
-                <button class="join-item btn btn-sm btn-outline kai" phx-click="sentences">字</button>
-                <button class="join-item btn btn-sm btn-outline kai" phx-click="images">圖</button>
+                <button class={"join-item btn btn-sm kai #{if @toggle_sentences, do: "btn-primary", else: "btn-outline"}"}
+                        phx-click="toggle-sentences">字</button>
+                <button class={"join-item btn btn-sm kai #{if @toggle_images, do: "btn-primary", else: "btn-outline"}"}
+                        phx-click="toggle-images">圖</button>
             </div>
             <button class="btn btn-sm btn-outline kai" phx-click="reset">重置</button>
             <.link class="btn btn-sm btn-outline kai" patch={~p"/lessons/#{@lesson.id}/edit"}>編輯</.link>
