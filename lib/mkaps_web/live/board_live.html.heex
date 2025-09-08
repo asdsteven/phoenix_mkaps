@@ -71,66 +71,53 @@
 <% end %>
 
 <%= if @live_action == :slide do %>
-    <div class="w-[1280px] h-[720px] bg-[url(/images/background1.jpg)] bg-cover bg-center relative select-none overflow-hidden">
-        <div class="absolute inset-0 bg-zinc-800/90"></div>
-        <div :if={@slide && @slide.sentences}
-             class="flex-none">
-            <div class="flex justify-center my-4"
-                 :for={{sentence, i} <- Enum.with_index(String.split(@slide.sentences, "\n"))}>
-                <span class={["inline-flex flex-wrap gap-y-8 relative px-4 py-2 rounded-lg bg-stone-100 shadow-sm/100 text-black kai mkaps-draggable"]}
-                      phx-hook="Draggable" id={"sentence-#{i}"}
-                      style={Map.get(@slide.item_xyzs || %{}, "sentence-#{i}", "left:0px;top:0px;z-index:0")}>
-                    <span :for={{{grapheme, deco}, j} <- Enum.with_index(graphemes(sentence))}
-                          class={["inline-block",
-                               MapSet.member?(@highlights, "#{@slide.id}-#{i}-#{j}") && "text-violet-900 bg-violet-200",
-                               !MapSet.member?(@highlights, "#{@slide.id}-#{i}-#{j-1}") && "rounded-l-md",
-                               !MapSet.member?(@highlights, "#{@slide.id}-#{i}-#{j+1}") && "rounded-r-md",
-                               deco == "underline" && "underline underline-offset-[0.15em]"]}
-                          data-key={"#{@slide.id}-#{i}-#{j}"}>
-                        <%= if grapheme == " " do %>
-                            &nbsp;
-                        <% else %>
-                            <%= grapheme %>
-                        <% end %>
-                    </span>
+    <div class="w-[1280px] h-[720px] bg-[url(/images/background1.jpg)] bg-cover bg-center relative select-none overflow-hidden"
+          id="background">
+        <div class="absolute inset-0 bg-zinc-800/90 pointer-events-none"></div>
+        <%= if @slide && @slide.sentences do %>
+            <span class={["absolute px-4 py-2 rounded-lg bg-stone-100 shadow-sm/100 text-black kai mkaps-touch-drag"]}
+                  phx-hook="Touchable" id={"sentence-#{i}"}
+                  style={Map.get(@slide.item_xyzs || %{}, "sentence-#{i}", "left:0px;top:0px;z-index:0")}
+                  :for={{sentence, i} <- Enum.with_index(String.split(@slide.sentences, "\n"))}>
+                <span :for={{{grapheme, deco}, j} <- Enum.with_index(graphemes(sentence))}
+                      phx-hook="Touchable" id={"#{@slide.id}-#{i}-#{j}"}
+                      class={["inline-block mkaps-touch-tap",
+                           MapSet.member?(@highlights, "#{@slide.id}-#{i}-#{j}") && "text-violet-900 bg-violet-200",
+                           !MapSet.member?(@highlights, "#{@slide.id}-#{i}-#{j-1}") && "rounded-l-md",
+                           !MapSet.member?(@highlights, "#{@slide.id}-#{i}-#{j+1}") && "rounded-r-md",
+                           deco == "underline" && "underline underline-offset-[0.15em]"]}>
+                    <%= if grapheme == " " do %>
+                        &nbsp;
+                    <% else %>
+                        <%= grapheme %>
+                    <% end %>
                 </span>
-            </div>
-        </div>
-        <div :if={@slide && @slide.images}
-             class="flex flex-wrap justify-center">
+            </span>
+        <% end %>
+        <%= if @slide && @slide.images do %>
             <img :for={{image, i} <- Enum.with_index(String.split(@slide.images, "\n"))}
-                 class={["relative w-auto shadow-sm/100 m-2 rounded-lg mkaps-draggable"]}
-                 src={image} phx-hook="Draggable" id={"image-#{i}"} draggable="false"
+                 class={["absolute w-auto shadow-sm/100 m-2 rounded-lg mkaps-touch-drag mkaps-touch-rotate"]}
+                 src={image} phx-hook="Touchable" id={"image-#{i}"} draggable="false"
                  style={Map.get(@slide.item_xyzs || %{}, "image-#{i}", "left:0px;top:0px;z-index:0")}>
+        <% end %>
+        <div class="fixed bottom-0 left-1/2 transform -translate-x-1/2 join flex justify-center z-9999" id="ui-bottom">
+            <.link :for={slide <- @lesson.slides}
+                   patch={~p"/lessons/#{@lesson.id}/slides/#{slide.position}"}
+                   class={["join-item btn btn-xs btn-outline", slide.position == @slide_position && "btn-primary"]}>
+                <%= slide.position %>
+            </.link>
         </div>
-        <div class="absolute bottom-0 left-0 w-full flex justify-center">
-            <div class="flex-none join z-9999">
-                <.link :for={slide <- @lesson.slides}
-                       patch={~p"/lessons/#{@lesson.id}/slides/#{slide.position}"}
-                       class={["join-item btn btn-xs btn-outline", slide.position == @slide_position && "btn-primary"]}>
-                    <%= slide.position %>
-                </.link>
+        <div class="fixed bottom-0 left-0 flex flex-col z-9999" id="ui-left">
+            <button class="btn btn-sm btn-outline kai" phx-click="draw">繪畫</button>
+            <div class="join">
+                <button class="join-item btn btn-sm btn-outline kai" phx-click="sentences">字</button>
+                <button class="join-item btn btn-sm btn-outline kai" phx-click="images">圖</button>
             </div>
+            <button class="btn btn-sm btn-outline kai" phx-click="reset">重置</button>
+            <.link class="btn btn-sm btn-outline kai" patch={~p"/lessons/#{@lesson.id}/edit"}>編輯</.link>
+            <button class="btn btn-sm btn-outline kai" phx-hook="FullScreen" id="fullscreen">全屏</button>
         </div>
-        <div class="absolute bottom-0 left-0 flex flex-col z-9999">
-            <div class="join">
-                <button class="join-item btn btn-sm btn-outline kai" phx-click="item-smaller">獨小</button>
-                <button class="join-item btn btn-sm btn-outline kai" phx-click="item-larger">獨大</button>
-            </div>
-            <div class="join">
-                <button class="join-item btn btn-sm btn-outline kai" phx-click="font-smaller">字小</button>
-                <button class="join-item btn btn-sm btn-outline kai" phx-click="font-larger">字大</button>
-            </div>
-            <div class="join">
-                <button class="join-item btn btn-sm btn-outline kai" phx-click="image-smaller">圖小</button>
-                <button class="join-item btn btn-sm btn-outline kai" phx-click="image-larger">圖大</button>
-            </div>
-            <div class="join">
-                <.link patch={~p"/lessons/#{@lesson.id}/edit"} class="join-item btn btn-sm btn-outline kai">編輯</.link>
-                <button class="join-item btn btn-sm btn-outline kai" phx-hook="FullScreen" id="fullscreen">全屏</button>
-            </div>
-        </div>
-        <div class="absolute bottom-0 right-0 z-9999">
+        <div class="fixed bottom-0 right-0 z-9999" id="ui-right">
             <.link class="btn btn-circle btn-outline" patch={~p"/lessons/#{@lesson.id}/slides/#{@slide_position-1}"}>&lt;</.link>
             <.link class="btn btn-circle btn-outline" patch={~p"/lessons/#{@lesson.id}/slides/#{@slide_position+1}"}>&gt;</.link>
         </div>

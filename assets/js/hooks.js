@@ -1,40 +1,18 @@
 let Hooks = {}
 
-let touches = new Map()
-
-Hooks.Draggable = {
+Hooks.Touchable = {
   mounted() {
-    let el = this.el
-    let offset = { x: 0, y: 0 }
-    let origin = { x: 0, y: 0 }
-    let isDragging = 0
-    let touchended = false
+    const el = this.el
+    const touches = []
+    let touchended = 0
 
-    const startDrag = (point) => {
-      origin.x = point.clientX
-      origin.y = point.clientY
-      offset.x = point.clientX - parseInt(el.style.left, 10)
-      offset.y = point.clientY - parseInt(el.style.top, 10)
-      const allZ = Array.from(document.querySelectorAll('.mkaps-draggable')).map(e => e.style.zIndex);
-      el.style.zIndex = Math.max(...allZ) + 1
-    }
-
-    const doDrag = (point) => {
-      el.style.cursor = "grabbing"
-      el.style.left = point.clientX - offset.x + "px"
-      el.style.top = point.clientY - offset.y + "px"
-    }
-
-    const toggleHighlight = (key) => {
-      this.pushEvent("toggle-highlight", {
-        key: key
-      })
-    }
-
-    const stopDrag = () => {
-      el.style.cursor = "grab"
-      /* const allZ = Array.from(document.querySelectorAll('.mkaps-draggable')).map(e => e.style.zIndex);
-       * el.style.zIndex = Math.max(...allZ) + 1 */
+    const inset = () => {
+      const rect = el.getBoundingClientRect()
+      const lip = 10
+      if (rect.right < lip) el.style.left = `${lip - rect.width}px`
+      if (rect.left > 1280 - lip) el.style.left = `${1280 - lip}px`
+      if (rect.bottom < lip) el.style.top = `${lip - rect.height}px`
+      if (rect.top > 720 - lip) el.style.top = `${720 - lip}px`
       this.pushEvent("drag", {
         item: el.id,
         x: parseInt(el.style.left, 10),
@@ -43,68 +21,127 @@ Hooks.Draggable = {
       })
     }
 
+    const touchStart = (identifier, point) => {
+      touches.push({
+        isMain: touches.length < 2,
+        moved: false,
+        identifier: identifier,
+        origin: {
+          x: point.clientX,
+          y: point.clientY
+        },
+        elOrigin: {
+          x: parseInt(el.style.left, 10),
+          y: parseInt(el.style.top, 10)
+        },
+        x: point.clientX,
+        y: point.clientY
+      })
+      el.style.cursor = "grabbing"
+      this.pushEvent("drag", {
+        item: el.id,
+        x: parseInt(el.style.left, 10),
+        y: parseInt(el.style.top, 10),
+        z: parseInt(el.style.zIndex, 10)
+      })
+    }
+
+    const touchMove = (identifier, point) => {
+      const t = touches.find(t => t.identifier == identifier)
+      if (!t) return false
+      t.x = point.clientX
+      t.y = point.clientY
+      t.moved ||= Math.abs(t.x - t.origin.x) >= 10
+      t.moved ||= Math.abs(t.y - t.origin.y) >= 10
+      return t.moved && t.isMain
+    }
+
+    const pinch = (t0, t1) => {
+    }
+
+    const touchMoved = () => {
+      const mainTouches = touches.filter(t => t.isMain)
+      if (mainTouches.length == 1) {
+        if (el.matches('.mkaps-touch-drag')) {
+          const t = mainTouches[0]
+          el.style.left = `${t.elOrigin.x + t.x - t.origin.x}px`
+          el.style.top = `${t.elOrigin.y + t.y - t.origin.y}px`
+          touches.forEach(t => t.moved = true)
+          const allZ = Array.from(document.querySelectorAll('.mkaps-touch-drag')).map(e => e.style.zIndex);
+          el.style.zIndex = Math.max(...allZ) + 1
+        }
+      } else {
+        if (el.matches('.mkaps-touch-drag')) {
+          pinch(mainTouches[0], mainTouches[1])
+        }
+      }
+    }
+
+    const touchEnd = (identifier) => {
+      const i = touches.findIndex(t => t.identifier == identifier)
+      if (i == -1) return
+      if (el.matches('.mkaps-touch-tap') && !touches[i].moved) {
+        this.pushEvent("toggle-highlight", {
+          key: el.id
+        })
+      }
+      touches.splice(i, 1)
+      if (touches.length == 0) el.style.cursor = "grab"
+    }
+
+    const touchEnded = () => {
+      const mainTouches = touches.filter(t => t.isMain)
+      if (mainTouches.length == 2) return
+      if (mainTouches.length == 0 && el.matches('.mkaps-touch-drag')) inset()
+      const rect = el.getBoundingClientRect()
+      for (const t of touches) {
+        if (t.isMain) continue
+        if (!(rect.left <= t.x && t.x < rect.right)) continue
+        if (!(rect.top <= t.y && t.y < rect.bottom)) continue
+        t.isMain = true
+        mainTouches.push(t)
+        if (mainTouches.length == 2) break
+      }
+    }
+
     el.style.cursor = "grab"
 
     el.addEventListener("mousedown", (e) => {
-      if (touchended) return
-      if (isDragging) return
-      isDragging = 1
-      startDrag(e)
+      if (Date.now() - touchended < 1000) return
+      touchStart('mouse', e)
     })
     el.addEventListener("touchstart", (e) => {
-      if (isDragging) return
       for (const touch of e.changedTouches) {
-        if (touches.has(touch.identifier)) continue
-        if (touch.target.closest('.mkaps-draggable') !== el) continue
+        if (!el.contains(touch.target)) continue
         e.preventDefault()
-        isDragging = 11
-        touches.set(touch.identifier, el)
-        startDrag(touch)
-        break
+        touchStart(touch.identifier, touch)
       }
     }, { passive: false })
 
     window.addEventListener("mousemove", (e) => {
-      if (![1, 2].includes(isDragging)) return
-      if (isDragging == 1 && Math.abs(e.clientX - origin.x) < 10 && Math.abs(e.clientY - origin.y) < 10) return
-      isDragging = 2
-      doDrag(e)
+      if (touchMove('mouse', e)) touchMoved()
     })
     window.addEventListener("touchmove", (e) => {
-      if (![11, 12].includes(isDragging)) return
+      let mainMoved = false
       for (const touch of e.changedTouches) {
-        if (touches.get(touch.identifier) !== el) continue
-        if (isDragging == 11 && Math.abs(touch.clientX - origin.x) < 10 && Math.abs(touch.clientY - origin.y) < 10) return
+        if (!el.contains(touch.target)) continue
         e.preventDefault()
-        isDragging = 12
-        doDrag(touch)
-        break
+        mainMoved ||= touchMove(touch.identifier, touch)
       }
+      if (mainMoved) touchMoved()
     }, { passive: false })
 
     window.addEventListener("mouseup", (e) => {
-      if (![1, 2].includes(isDragging)) return
-      if (isDragging == 1) {
-        if (e.target.dataset.key) toggleHighlight(e.target.dataset.key)
-      } else {
-        stopDrag()
-      }
-      isDragging = 0
+      touchEnd('mouse')
+      touchEnded()
     })
     window.addEventListener("touchend", (e) => {
-      if (![11, 12].includes(isDragging)) return
       for (const touch of e.changedTouches) {
-        if (touches.get(touch.identifier) !== el) continue
-        if (isDragging == 11) {
-          toggleHighlight(e.target.dataset.key)
-        } else {
-          stopDrag()
-        }
-        isDragging = 0
-        touches.delete(touch.identifier)
-        touchended = true
-        break
+        if (!el.contains(touch.target)) continue
+        touchEnd(touch.identifier)
+        touchended = Date.now()
       }
+      touchEnded()
     })
   }
 }
