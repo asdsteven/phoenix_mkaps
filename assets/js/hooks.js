@@ -13,14 +13,21 @@ Hooks.Touchable = {
     if (el.matches('.mkaps-sentence')) {
       sentenceOrigins.set(el, {
         x: parseInt(el.style.left, 10),
-        y: parseInt(el.style.top, 10)
+        y: parseInt(el.style.top, 10),
+        fontSize: parseInt(el.style.fontSize, 10)
       })
     }
     if (el.matches('.mkaps-image')) {
       imageOrigins.set(el, {
         x: parseInt(el.style.left, 10),
-        y: parseInt(el.style.top, 10)
+        y: parseInt(el.style.top, 10),
+        height: parseInt(el.style.height, 10)
       })
+    }
+
+    const getSize = (el) => {
+      if (el.matches('.mkaps-sentence')) return parseInt(el.style.fontSize, 10)
+      if (el.matches('.mkaps-image')) return parseInt(el.style.height, 10)
     }
 
     const touchStart = (identifier, point) => {
@@ -41,7 +48,9 @@ Hooks.Touchable = {
         },
         elOrigin: {
           x: parseInt(el.style.left, 10),
-          y: parseInt(el.style.top, 10)
+          y: parseInt(el.style.top, 10),
+          fontSize: parseInt(el.style.fontSize, 10),
+          height: parseInt(el.style.height, 10)
         },
         x: point.clientX,
         y: point.clientY
@@ -49,12 +58,15 @@ Hooks.Touchable = {
       el.style.cursor = "grabbing"
 
       // so that tap highlight would not reset xyz
-      this.pushEvent("drag", {
-        item: el.id,
-        x: parseInt(el.style.left, 10),
-        y: parseInt(el.style.top, 10),
-        z: parseInt(el.style.zIndex, 10)
-      })
+      if (el.matches('.mkaps-drag')) {
+        this.pushEvent("drag", {
+          item: el.id,
+          x: parseInt(el.style.left, 10),
+          y: parseInt(el.style.top, 10),
+          z: parseInt(el.style.zIndex, 10),
+          size: getSize(el)
+        })
+      }
     }
 
     const touchMove = (identifier, point) => {
@@ -73,7 +85,41 @@ Hooks.Touchable = {
       return t.moved && t.isMain
     }
 
-    const pinch = (t0, t1) => {
+    const pinchSentence = (t0, t1) => {
+      const len0 = Math.sqrt(Math.pow(t0.origin.x - t1.origin.x, 2) + Math.pow(t0.origin.y - t1.origin.y, 2))
+      const len1 = Math.sqrt(Math.pow(t0.x - t1.x, 2) + Math.pow(t0.y - t1.y, 2))
+      el.style.left = `${t0.x - Math.round((t0.origin.x - t0.elOrigin.x) * len1 / len0)}px`
+      el.style.top = `${t0.y - Math.round((t0.origin.y - t0.elOrigin.y) * len1 / len0)}px`
+      el.style.fontSize = `${Math.round(t0.elOrigin.fontSize * len1 / len0)}px`
+    }
+
+    const pinchImage = (t0, t1) => {
+      const len0 = Math.sqrt(Math.pow(t0.origin.x - t1.origin.x, 2) + Math.pow(t0.origin.y - t1.origin.y, 2))
+      const len1 = Math.sqrt(Math.pow(t0.x - t1.x, 2) + Math.pow(t0.y - t1.y, 2))
+      el.style.left = `${t0.x - Math.round((t0.origin.x - t0.elOrigin.x) * len1 / len0)}px`
+      el.style.top = `${t0.y - Math.round((t0.origin.y - t0.elOrigin.y) * len1 / len0)}px`
+      el.style.height = `${Math.round(t0.elOrigin.height * len1 / len0)}px`
+    }
+
+    const pinchBackground = (t0, t1) => {
+      const len0 = Math.sqrt(Math.pow(t0.origin.x - t1.origin.x, 2) + Math.pow(t0.origin.y - t1.origin.y, 2))
+      const len1 = Math.sqrt(Math.pow(t0.x - t1.x, 2) + Math.pow(t0.y - t1.y, 2))
+      if (el.dataset.toggleSentences !== undefined) {
+        for (const [e, {x, y, fontSize}] of sentenceOrigins) {
+          if (!cachedEls.has(e)) continue
+          e.style.left = `${t0.x - Math.round((t0.origin.x - x) * len1 / len0)}px`
+          e.style.top = `${t0.y - Math.round((t0.origin.y - y) * len1 / len0)}px`
+          e.style.fontSize = `${Math.round(fontSize * len1 / len0)}px`
+        }
+      }
+      if (el.dataset.toggleImages !== undefined) {
+        for (const [e, {x, y, height}] of imageOrigins) {
+          if (!cachedEls.has(e)) continue
+          e.style.left = `${t0.x - Math.round((t0.origin.x - x) * len1 / len0)}px`
+          e.style.top = `${t0.y - Math.round((t0.origin.y - y) * len1 / len0)}px`
+          e.style.height = `${Math.round(height * len1 / len0)}px`
+        }
+      }
     }
 
     const touchMoved = () => {
@@ -100,9 +146,9 @@ Hooks.Touchable = {
           }
         }
       } else {
-        if (el.matches('.mkaps-touch-drag')) {
-          pinch(mainTouches[0], mainTouches[1])
-        }
+        if (el.matches('.mkaps-sentence')) pinchSentence(mainTouches[0], mainTouches[1])
+        if (el.matches('.mkaps-image')) pinchImage(mainTouches[0], mainTouches[1])
+        if (el.id == 'background') pinchBackground(mainTouches[0], mainTouches[1])
       }
     }
 
@@ -120,13 +166,15 @@ Hooks.Touchable = {
         if (el.matches('.mkaps-sentence')) {
           sentenceOrigins.set(el, {
             x: parseInt(el.style.left, 10),
-            y: parseInt(el.style.top, 10)
+            y: parseInt(el.style.top, 10),
+            fontSize: parseInt(el.style.fontSize, 10)
           })
         }
         if (el.matches('.mkaps-image')) {
           imageOrigins.set(el, {
             x: parseInt(el.style.left, 10),
-            y: parseInt(el.style.top, 10)
+            y: parseInt(el.style.top, 10),
+            height: parseInt(el.style.height, 10)
           })
         }
       }
@@ -138,14 +186,9 @@ Hooks.Touchable = {
         item: el.id,
         x: parseInt(el.style.left, 10),
         y: parseInt(el.style.top, 10),
-        z: parseInt(el.style.zIndex, 10)
+        z: parseInt(el.style.zIndex, 10),
+        size: getSize(el)
       })
-      /* const rect = el.getBoundingClientRect()
-       * const lip = 10
-       * if (rect.right < lip) el.style.left = `${lip - rect.width}px`
-       * if (rect.left > 1280 - lip) el.style.left = `${1280 - lip}px`
-       * if (rect.bottom < lip) el.style.top = `${lip - rect.height}px`
-       * if (rect.top > 720 - lip) el.style.top = `${720 - lip}px` */
     }
 
     const touchEnded = () => {
@@ -167,7 +210,8 @@ Hooks.Touchable = {
             if (!cachedEls.has(e)) return
             sentenceOrigins.set(e, {
               x: parseInt(e.style.left, 10),
-              y: parseInt(e.style.top, 10)
+              y: parseInt(e.style.top, 10),
+              fontSize: parseInt(e.style.fontSize, 10)
             })
             inset(e)
           })
@@ -175,7 +219,8 @@ Hooks.Touchable = {
             if (!cachedEls.has(e)) return
             imageOrigins.set(e, {
               x: parseInt(e.style.left, 10),
-              y: parseInt(e.style.top, 10)
+              y: parseInt(e.style.top, 10),
+              height: parseInt(e.style.height, 10)
             })
             inset(e)
           })
@@ -184,16 +229,28 @@ Hooks.Touchable = {
     }
 
     const backgroundActive = () => el.dataset.toggleSentences !== undefined || el.dataset.toggleImages !== undefined
+    const backgroundActiveSentences = () => {
+      const el = document.getElementById('background')
+      return el.dataset.toggleSentences !== undefined && el.dataset.toggleImages === undefined
+    }
+    const backgroundActiveImages = () => {
+      const el = document.getElementById('background')
+      return el.dataset.toggleSentences === undefined && el.dataset.toggleImages !== undefined
+    }
 
     el.addEventListener("mousedown", (e) => {
       if (Date.now() - touchended < 1000) return
       if (el.id == 'background' && !backgroundActive()) return
+      if (el.matches('.mkaps-image') && backgroundActiveSentences()) return
+      if (el.matches('.mkaps-sentence') && backgroundActiveImages()) return
       touchStart('mouse', e)
     })
     el.addEventListener("touchstart", (e) => {
       for (const touch of e.changedTouches) {
         if (!el.contains(touch.target)) continue
         if (el.id == 'background' && !backgroundActive()) continue
+        if (el.matches('.mkaps-image') && backgroundActiveSentences()) continue
+        if (el.matches('.mkaps-sentence') && backgroundActiveImages()) continue
         touchStart(touch.identifier, touch)
       }
     }, { passive: false })

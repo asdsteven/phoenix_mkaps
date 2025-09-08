@@ -146,14 +146,32 @@ defmodule MkapsWeb.BoardLive do
     {:noreply, assign(socket, toggle_images: !socket.assigns.toggle_images)}
   end
 
-  def handle_event("drag", %{"item" => item_id, "x" => x, "y" => y, "z" => z}, socket) do
-    item_xyzs = Map.put(socket.assigns.slide.item_xyzs || %{}, item_id, [x,y,z])
-    socket.assigns.slide |> Slide.changeset(%{item_xyzs: item_xyzs}) |> Repo.update!
+  def handle_event("reset", _params, socket) do
+    socket.assigns.slide |> Slide.changeset(%{item_xyzs: nil}) |> Repo.update!
+    socket.assigns.slide |> Slide.changeset(%{item_sizes: nil}) |> Repo.update!
+    {:noreply, assign(socket, toggle_images: !socket.assigns.toggle_images)}
     lesson = Lesson |> preload(:slides) |> Repo.get!(socket.assigns.lesson.id)
     {:noreply,
      socket
      |> assign(lesson: lesson)
      |> assign(slide: Enum.find(lesson.slides, &(&1.position == socket.assigns.slide.position)))}
+  end
+
+  def handle_event("drag", %{"item" => item_id, "x" => x, "y" => y, "z" => z, "size" => size}, socket) do
+    item_xyzs = Map.put(socket.assigns.slide.item_xyzs || %{}, item_id, [x,y,z])
+    socket.assigns.slide |> Slide.changeset(%{item_xyzs: item_xyzs}) |> Repo.update!
+    item_sizes = Map.put(socket.assigns.slide.item_sizes || %{}, item_id, size)
+    socket.assigns.slide |> Slide.changeset(%{item_sizes: item_sizes}) |> Repo.update!
+    lesson = Lesson |> preload(:slides) |> Repo.get!(socket.assigns.lesson.id)
+    {:noreply,
+     socket
+     |> assign(lesson: lesson)
+     |> assign(slide: Enum.find(lesson.slides, &(&1.position == socket.assigns.slide.position)))}
+  end
+
+  def handle_event("log", %{"msg" => msg}, socket) do
+    IO.inspect(msg)
+    {:noreply, socket}
   end
 
   def handle_event("toggle-highlight", %{"key" => key}, socket) do
@@ -194,6 +212,16 @@ defmodule MkapsWeb.BoardLive do
     {:noreply,
      socket
      |> assign(highlights: highlights)}
+  end
+
+  defp get_font_size(item_sizes, id) do
+    px = Map.get(item_sizes || %{}, id, 72)
+    "font-size:#{px}px"
+  end
+
+  defp get_image_size(item_sizes, id) do
+    px = Map.get(item_sizes || %{}, id, 200)
+    "height:#{px}px"
   end
 
   defp get_xyz(item_xyzs, id) do
