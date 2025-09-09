@@ -91,7 +91,7 @@ Hooks.Touchable = {
       const len1 = Math.sqrt(Math.pow(t0.x - t1.x, 2) + Math.pow(t0.y - t1.y, 2))
       el.style.left = `${t0.x - Math.round((t0.origin.x - t0.elOrigin.x) * len1 / len0)}px`
       el.style.top = `${t0.y - Math.round((t0.origin.y - t0.elOrigin.y) * len1 / len0)}px`
-      el.style.fontSize = `${Math.round(t0.elOrigin.fontSize * len1 / len0)}px`
+      el.style.fontSize = `${Math.max(16, Math.min(100, Math.round(t0.elOrigin.fontSize * len1 / len0)))}px`
     }
 
     const pinchImage = (t0, t1) => {
@@ -99,7 +99,7 @@ Hooks.Touchable = {
       const len1 = Math.sqrt(Math.pow(t0.x - t1.x, 2) + Math.pow(t0.y - t1.y, 2))
       el.style.left = `${t0.x - Math.round((t0.origin.x - t0.elOrigin.x) * len1 / len0)}px`
       el.style.top = `${t0.y - Math.round((t0.origin.y - t0.elOrigin.y) * len1 / len0)}px`
-      el.style.width = `${Math.round(t0.elOrigin.width * len1 / len0)}px`
+      el.style.width = `${Math.max(100, Math.min(1280, Math.round(t0.elOrigin.width * len1 / len0)))}px`
     }
 
     const pinchBackground = (t0, t1) => {
@@ -110,7 +110,7 @@ Hooks.Touchable = {
           if (!cachedEls.has(e)) continue
           e.style.left = `${t0.x - Math.round((t0.origin.x - x) * len1 / len0)}px`
           e.style.top = `${t0.y - Math.round((t0.origin.y - y) * len1 / len0)}px`
-          e.style.fontSize = `${Math.round(fontSize * len1 / len0)}px`
+          e.style.fontSize = `${Math.max(16, Math.min(100, Math.round(fontSize * len1 / len0)))}px`
         }
       }
       if (el.dataset.toggleImages !== undefined) {
@@ -118,7 +118,7 @@ Hooks.Touchable = {
           if (!cachedEls.has(e)) continue
           e.style.left = `${t0.x - Math.round((t0.origin.x - x) * len1 / len0)}px`
           e.style.top = `${t0.y - Math.round((t0.origin.y - y) * len1 / len0)}px`
-          e.style.width = `${Math.round(width * len1 / len0)}px`
+          e.style.width = `${Math.max(100, Math.min(1280, Math.round(width * len1 / len0)))}px`
         }
       }
     }
@@ -126,6 +126,7 @@ Hooks.Touchable = {
     const touchMoved = () => {
       const mainTouches = touches.filter(t => t.isMain)
       if (mainTouches.length == 1) {
+        if (document.getElementById('background').dataset.togglePan === undefined) return
         const t = mainTouches[0]
         if (el.matches('.mkaps-touch-drag')) {
           el.style.left = `${t.elOrigin.x + t.x - t.origin.x}px`
@@ -147,6 +148,7 @@ Hooks.Touchable = {
           }
         }
       } else {
+        if (document.getElementById('background').dataset.toggleZoom === undefined) return
         if (el.matches('.mkaps-sentence')) pinchSentence(mainTouches[0], mainTouches[1])
         if (el.matches('.mkaps-image')) pinchImage(mainTouches[0], mainTouches[1])
         if (el.id == 'background') pinchBackground(mainTouches[0], mainTouches[1])
@@ -284,11 +286,10 @@ Hooks.Touchable = {
       if (touchMove('mouse', e)) touchMoved()
     })
     window.addEventListener("touchmove", (e) => {
+      e.preventDefault()
       let mainMoved = false
       for (const touch of e.changedTouches) {
-        if (!el.contains(touch.target)) continue
         if (!touchMove(touch.identifier, touch)) continue
-        e.preventDefault()
         mainMoved = true
       }
       if (mainMoved) touchMoved()
@@ -300,7 +301,6 @@ Hooks.Touchable = {
     window.addEventListener("touchend", (e) => {
       let ended = false
       for (const touch of e.changedTouches) {
-        if (!el.contains(touch.target)) continue
         if (!touchEnd(touch.identifier)) continue
         ended = true
         touchended = Date.now()

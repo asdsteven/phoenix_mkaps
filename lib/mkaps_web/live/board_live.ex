@@ -160,8 +160,12 @@ defmodule MkapsWeb.BoardLive do
   end
 
   def handle_event("save-transforms", %{"slot" => slot}, socket) do
-    active_transforms = Map.get(socket.assigns.slide.transforms || %{}, "", %{})
-    transforms = Map.put(socket.assigns.slide.transforms || %{}, slot, active_transforms)
+    active_transforms = Map.get(socket.assigns.slide.transforms || %{}, "")
+    transforms = if active_transforms == nil do
+      Map.delete(socket.assigns.slide.transforms || %{}, slot)
+    else
+      Map.put(socket.assigns.slide.transforms || %{}, slot, active_transforms)
+    end
     socket.assigns.slide |> Slide.changeset(%{transforms: transforms}) |> Repo.update!
     {:noreply,
      socket
@@ -174,7 +178,7 @@ defmodule MkapsWeb.BoardLive do
   end
 
   def handle_event("apply-transforms", %{"slot" => slot}, socket) do
-    slot_transforms = Map.get(socket.assigns.slide.transforms || %{}, slot, %{})
+    slot_transforms = Map.get(socket.assigns.slide.transforms || %{}, slot)
     transforms = Map.put(socket.assigns.slide.transforms || %{}, "", slot_transforms)
     socket.assigns.slide |> Slide.changeset(%{transforms: transforms}) |> Repo.update!
     {:noreply,
@@ -185,6 +189,18 @@ defmodule MkapsWeb.BoardLive do
 
   def handle_event("apply-transforms", _params, socket) do
     {:noreply, assign(socket, transforms_state: :apply)}
+  end
+
+  def handle_event("clear-transforms", _params, socket) do
+    transforms = Map.delete(socket.assigns.slide.transforms || %{}, "")
+    socket.assigns.slide |> Slide.changeset(%{transforms: transforms}) |> Repo.update!
+    {:noreply,
+     socket
+     |> assign(slide: Slide |> Repo.get!(socket.assigns.slide.id))}
+  end
+
+  def handle_event("cancel-transforms", _params, socket) do
+    {:noreply, assign(socket, transforms_state: :pending)}
   end
 
   def handle_event("drag", %{"item" => item_id, "x" => x, "y" => y, "z" => z, "size" => size}, socket) do

@@ -71,10 +71,13 @@
 <% end %>
 
 <%= if @live_action == :slide do %>
-    <div class={["w-[1280px] h-[720px] bg-[url(/images/background1.jpg)] bg-cover bg-center relative select-none overflow-hidden",
-               (@toggle_sentences || @toggle_images) && "cursor-grab"]}
-         phx-hook="Touchable" id="background" data-toggle-sentences={@toggle_sentences} data-toggle-images={@toggle_images}>
+    <div class="w-[1280px] h-[720px] bg-[url(/images/background1.jpg)] bg-cover bg-center relative select-none overflow-hidden">
         <div class="absolute inset-0 bg-zinc-800/90 pointer-events-none"></div>
+        <div class={["w-[1280px] h-[720px]",
+                   (@toggle_sentences || @toggle_images) && "cursor-grab"]}
+             phx-hook="Touchable" id="background" data-toggle-sentences={@toggle_sentences} data-toggle-images={@toggle_images}
+             data-toggle-pan={@toggle_pan} data-toggle-zoom={@toggle_zoom} data-toggle-rotate={@toggle_rotate}>
+></div>
         <%= if @slide && @slide.sentences do %>
             <span class={["absolute px-[0.4em] py-[0.1em] rounded-lg bg-stone-100 shadow-sm/100 text-black leading-[1.1] kai cursor-grab mkaps-touch-drag mkaps-sentence"]}
                   phx-hook="Touchable" id={"sentence-#{i}"}
@@ -119,21 +122,27 @@
             <div class="join tooltip tooltip-right" data-tip="存取物件位置表">
                 <%= if @transforms_state == :save do %>
                     <button class={"join-item btn btn-sm kai btn-outline"}
-                            phx-click="save-transforms" phx-value-slot="1">存為位置表一</button>
-                    <button class={"join-item btn btn-sm kai btn-outline"}
-                            phx-click="save-transforms" phx-value-slot="2">存為位置表二</button>
+                            phx-click="cancel-transforms">取消</button>
+                    <button class={"join-item btn btn-sm kai #{if Map.has_key?(@slide.transforms || %{}, "1"), do: "btn-primary", else: "btn-outline"}"}
+                            phx-click="save-transforms" phx-value-slot="1">存入位置表一</button>
+                    <button class={"join-item btn btn-sm kai #{if Map.has_key?(@slide.transforms || %{}, "2"), do: "btn-primary", else: "btn-outline"}"}
+                            phx-click="save-transforms" phx-value-slot="2">存入位置表二</button>
                 <% end %>
                 <%= if @transforms_state == :apply do %>
                     <button class={"join-item btn btn-sm kai btn-outline"}
-                            phx-click="apply-transforms" phx-value-slot="1">應用位置表一</button>
+                            phx-click="cancel-transforms">取消</button>
                     <button class={"join-item btn btn-sm kai btn-outline"}
-                            phx-click="apply-transforms" phx-value-slot="2">應用位置表二</button>
+                            phx-click="apply-transforms" phx-value-slot="1" disabled={!Map.has_key?(@slide.transforms || %{}, "1")}>應用位置表一</button>
+                    <button class={"join-item btn btn-sm kai btn-outline"}
+                            phx-click="apply-transforms" phx-value-slot="2" disabled={!Map.has_key?(@slide.transforms || %{}, "2")}>應用位置表二</button>
                 <% end %>
                 <%= if @transforms_state == :pending do %>
                     <button class={"join-item btn btn-sm kai btn-outline"}
-                            phx-click="save-transforms">存位</button>
+                            phx-click="save-transforms">存</button>
                     <button class={"join-item btn btn-sm kai btn-outline"}
-                            phx-click="apply-transforms">用位</button>
+                            phx-click="apply-transforms">用</button>
+                    <button class={"join-item btn btn-sm kai btn-outline"}
+                            phx-click="clear-transforms">清</button>
                 <% end %>
             </div>
             <div class="join tooltip tooltip-right" data-tip="啟用輕觸動作移動、縮放、旋轉">
