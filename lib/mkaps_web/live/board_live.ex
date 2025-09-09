@@ -206,9 +206,7 @@ defmodule MkapsWeb.BoardLive do
   def handle_event("drag", %{"item" => item_id, "x" => x, "y" => y, "z" => z, "size" => size}, socket) do
     active_transforms = Map.get(socket.assigns.slide.transforms || %{}, "", %{})
     new_active_transforms = Map.put(active_transforms, item_id, [x,y,z,size])
-    IO.inspect(socket.assigns.slide.transforms)
     transforms = Map.put(socket.assigns.slide.transforms || %{}, "", new_active_transforms)
-    IO.inspect(transforms)
     socket.assigns.slide |> Slide.changeset(%{transforms: transforms}) |> Repo.update!
     {:noreply, assign(socket, slide: Slide |> Repo.get!(socket.assigns.slide.id))}
   end
