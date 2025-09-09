@@ -99,10 +99,24 @@
             </span>
         <% end %>
         <%= if @slide && @slide.images do %>
-            <img :for={{image, i} <- Enum.with_index(String.split(@slide.images, "\n"))}
-                 class={["absolute h-auto shadow-sm/100 rounded-lg cursor-grab mkaps-touch-drag mkaps-image"]}
-                 src={image} phx-hook="Touchable" id={"image-#{i}"} draggable="false"
-                 style={get_image_style(Map.get(@slide.transforms || %{}, "", %{}), "image-#{i}")}>
+            <%= for {image, i} <- Enum.with_index(String.split(@slide.images, "\n")) do %>
+                <%= if String.starts_with?(image, "avatar-") do %>
+                    <span class="absolute h-auto cursor-grab mkaps-touch-drag mkaps-image"
+                          phx-hook="Touchable" id={"image-#{i}"}
+                          style={get_image_style(Map.get(@slide.transforms || %{}, "", %{}), "image-#{i}")}>
+                        <img style={"filter:hue-rotate(#{get_avatar_hue(@slide, "image-#{i}")}deg) brightness(1.5)"}
+                             src="/uploads/3d52f5cc-e171-4f8d-9e0b-b5d901e9e9cb.png" draggable="false">
+                        <span class="absolute bottom-[9%] left-[26%] -translate-x-1/2 rotate-14 text-black kai"
+                              style={get_avatar_name_style(Map.get(@slide.transforms || %{}, "", %{}), "image-#{i}")}>
+                            <%= String.replace_prefix(image, "avatar-", "") %>
+                        </span>
+                    </span>
+                <% else %>
+                    <img class={["absolute h-auto shadow-sm/100 rounded-lg cursor-grab mkaps-touch-drag mkaps-image"]}
+                         src={image} phx-hook="Touchable" id={"image-#{i}"} draggable="false"
+                         style={get_image_style(Map.get(@slide.transforms || %{}, "", %{}), "image-#{i}")}>
+                <% end %>
+            <% end %>
         <% end %>
         <div class="fixed bottom-0 left-1/2 transform -translate-x-1/2 join z-9999" id="ui-bottom">
             <.link :for={slide <- @lesson.slides}
@@ -112,7 +126,15 @@
             </.link>
         </div>
         <div class="fixed bottom-0 left-0 flex flex-col z-9999" id="ui-left">
-            <button class="btn btn-sm btn-outline kai" phx-click="draw">繪畫</button>
+            <%= if get_avatar_hue(@slide, @focus_id) !== nil do %>
+                <div class="join">
+                    <button class="join-item btn btn-sm kai btn-outline"
+                            phx-click="hue-left">&lt;</button>
+                    <button class="join-item btn btn-sm btn-outline" disabled><%= div(get_avatar_hue(@slide, @focus_id), 30) + 1 %></button>
+                    <button class="join-item btn btn-sm kai btn-outline"
+                            phx-click="hue-right">&gt;</button>
+                </div>
+            <% end %>
             <div class="join tooltip tooltip-right" data-tip="輕觸背景操控所有字或圖">
                 <button class={"join-item btn btn-sm kai #{if @toggle_sentences, do: "btn-primary", else: "btn-outline"}"}
                         phx-click="toggle-sentences">字</button>

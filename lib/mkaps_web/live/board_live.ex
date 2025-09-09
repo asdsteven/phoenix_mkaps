@@ -12,6 +12,7 @@ defmodule MkapsWeb.BoardLive do
      |> assign(toggle_sentences: false, toggle_images: false)
      |> assign(transforms_state: :pending)
      |> assign(toggle_pan: true, toggle_zoom: false, toggle_rotate: false)
+     |> assign(focus_id: nil)
      |> allow_upload(:image,
      accept: :any,
      max_file_size: 1_000_000_000,
@@ -208,7 +209,54 @@ defmodule MkapsWeb.BoardLive do
     new_active_transforms = Map.put(active_transforms, item_id, [x,y,z,size])
     transforms = Map.put(socket.assigns.slide.transforms || %{}, "", new_active_transforms)
     socket.assigns.slide |> Slide.changeset(%{transforms: transforms}) |> Repo.update!
-    {:noreply, assign(socket, slide: Slide |> Repo.get!(socket.assigns.slide.id))}
+    {:noreply,
+     socket
+     |> assign(focus_id: item_id)
+     |> assign(slide: Slide |> Repo.get!(socket.assigns.slide.id))}
+  end
+
+  def handle_event("hue-left", _params, socket) do
+    slide = socket.assigns.slide
+    focus_id = socket.assigns.focus_id
+    hue = get_avatar_hue(slide, focus_id)
+    new_socket = if hue != nil do
+      "image-" <> i = focus_id
+      "avatar-" <> name = Enum.at(String.split(slide.images, "\n"), String.to_integer(i))
+      avatar = Map.get(slide.avatars || %{}, name)
+      new_avatar = if hue == 0 do
+        Map.put(avatar || %{}, "hue", 330)
+      else
+        Map.put(avatar || %{}, "hue", hue - 30)
+      end
+      avatars = Map.put(slide.avatars || %{}, name, new_avatar)
+      slide |> Slide.changeset(%{avatars: avatars}) |> Repo.update!
+      assign(socket, slide: Slide |> Repo.get!(slide.id))
+    else
+      socket
+    end
+    {:noreply, new_socket}
+  end
+
+  def handle_event("hue-right", _params, socket) do
+    slide = socket.assigns.slide
+    focus_id = socket.assigns.focus_id
+    hue = get_avatar_hue(slide, focus_id)
+    new_socket = if hue != nil do
+      "image-" <> i = focus_id
+      "avatar-" <> name = Enum.at(String.split(slide.images, "\n"), String.to_integer(i))
+      avatar = Map.get(slide.avatars || %{}, name)
+      new_avatar = if hue == 330 do
+        Map.put(avatar || %{}, "hue", 0)
+      else
+        Map.put(avatar || %{}, "hue", hue + 30)
+      end
+      avatars = Map.put(slide.avatars || %{}, name, new_avatar)
+      slide |> Slide.changeset(%{avatars: avatars}) |> Repo.update!
+      assign(socket, slide: Slide |> Repo.get!(slide.id))
+    else
+      socket
+    end
+    {:noreply, new_socket}
   end
 
   def handle_event("log", %{"msg" => msg}, socket) do
@@ -262,6 +310,27 @@ defmodule MkapsWeb.BoardLive do
   defp get_image_style(active_transforms, item_id) do
     [x,y,z,px] = Map.get(active_transforms || %{}, item_id, [0,0,0,200])
     "left:#{x}px;top:#{y}px;z-index:#{z};width:#{px}px"
+  end
+
+  defp get_avatar_name_style(active_transforms, item_id) do
+    [_,_,_,px] = Map.get(active_transforms || %{}, item_id, [0,0,0,200])
+    "font-size:#{round(px / 8)}px"
+  end
+
+  defp get_avatar_hue(slide, focus_id) do
+    if slide && slide.images && focus_id && String.starts_with?(focus_id, "image-") do
+      "image-" <> i = focus_id
+      text = Enum.at(String.split(slide.images, "\n"), String.to_integer(i))
+      if String.starts_with?(text, "avatar-") do
+        "avatar-" <> name = text
+        avatar = Map.get(slide.avatars || %{}, name)
+        Map.get(avatar || %{}, "hue", 0)
+      else
+        nil
+      end
+    else
+      nil
+    end
   end
 
   defp graphemes(s) do
