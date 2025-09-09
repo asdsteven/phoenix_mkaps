@@ -78,7 +78,7 @@
         <%= if @slide && @slide.sentences do %>
             <span class={["absolute px-[0.4em] py-[0.1em] rounded-lg bg-stone-100 shadow-sm/100 text-black leading-[1.1] kai cursor-grab mkaps-touch-drag mkaps-sentence"]}
                   phx-hook="Touchable" id={"sentence-#{i}"}
-                  style={get_xyz(@slide.item_xyzs, "sentence-#{i}") <> ";" <> get_font_size(@slide.item_sizes, "sentence-#{i}")}
+                  style={get_sentence_style(Map.get(@slide.transforms || %{}, "", %{}), "sentence-#{i}")}
                   :for={{sentence, i} <- Enum.with_index(String.split(@slide.sentences, "\n"))}>
                 <span :for={{{grapheme, deco}, j} <- Enum.with_index(graphemes(sentence))}
                       phx-hook="Touchable" id={"#{@slide.id}-#{i}-#{j}"}
@@ -97,9 +97,9 @@
         <% end %>
         <%= if @slide && @slide.images do %>
             <img :for={{image, i} <- Enum.with_index(String.split(@slide.images, "\n"))}
-                 class={["absolute w-auto shadow-sm/100 rounded-lg cursor-grab mkaps-touch-drag mkaps-image"]}
+                 class={["absolute h-auto shadow-sm/100 rounded-lg cursor-grab mkaps-touch-drag mkaps-image"]}
                  src={image} phx-hook="Touchable" id={"image-#{i}"} draggable="false"
-                 style={get_xyz(@slide.item_xyzs, "image-#{i}") <> ";" <> get_image_size(@slide.item_sizes, "image-#{i}")}>
+                 style={get_image_style(Map.get(@slide.transforms || %{}, "", %{}), "image-#{i}")}>
         <% end %>
         <div class="fixed bottom-0 left-1/2 transform -translate-x-1/2 join z-9999" id="ui-bottom">
             <.link :for={slide <- @lesson.slides}
@@ -110,13 +110,40 @@
         </div>
         <div class="fixed bottom-0 left-0 flex flex-col z-9999" id="ui-left">
             <button class="btn btn-sm btn-outline kai" phx-click="draw">繪畫</button>
-            <div class="join">
+            <div class="join tooltip tooltip-right" data-tip="輕觸背景操控所有字或圖">
                 <button class={"join-item btn btn-sm kai #{if @toggle_sentences, do: "btn-primary", else: "btn-outline"}"}
                         phx-click="toggle-sentences">字</button>
                 <button class={"join-item btn btn-sm kai #{if @toggle_images, do: "btn-primary", else: "btn-outline"}"}
                         phx-click="toggle-images">圖</button>
             </div>
-            <button class="btn btn-sm btn-outline kai" phx-click="reset">重置</button>
+            <div class="join tooltip tooltip-right" data-tip="存取物件位置表">
+                <%= if @transforms_state == :save do %>
+                    <button class={"join-item btn btn-sm kai btn-outline"}
+                            phx-click="save-transforms" phx-value-slot="1">存為位置表一</button>
+                    <button class={"join-item btn btn-sm kai btn-outline"}
+                            phx-click="save-transforms" phx-value-slot="2">存為位置表二</button>
+                <% end %>
+                <%= if @transforms_state == :apply do %>
+                    <button class={"join-item btn btn-sm kai btn-outline"}
+                            phx-click="apply-transforms" phx-value-slot="1">應用位置表一</button>
+                    <button class={"join-item btn btn-sm kai btn-outline"}
+                            phx-click="apply-transforms" phx-value-slot="2">應用位置表二</button>
+                <% end %>
+                <%= if @transforms_state == :pending do %>
+                    <button class={"join-item btn btn-sm kai btn-outline"}
+                            phx-click="save-transforms">存位</button>
+                    <button class={"join-item btn btn-sm kai btn-outline"}
+                            phx-click="apply-transforms">用位</button>
+                <% end %>
+            </div>
+            <div class="join tooltip tooltip-right" data-tip="啟用輕觸動作移動、縮放、旋轉">
+                <button class={"join-item btn btn-sm kai #{if @toggle_pan, do: "btn-primary", else: "btn-outline"}"}
+                        phx-click="toggle-pan">移</button>
+                <button class={"join-item btn btn-sm kai #{if @toggle_zoom, do: "btn-primary", else: "btn-outline"}"}
+                        phx-click="toggle-zoom">放</button>
+                <button class={"join-item btn btn-sm kai #{if @toggle_rotate, do: "btn-primary", else: "btn-outline"}"}
+                        phx-click="toggle-rotate">旋</button>
+            </div>
             <.link class="btn btn-sm btn-outline kai" patch={~p"/lessons/#{@lesson.id}/edit"}>編輯</.link>
             <button class="btn btn-sm btn-outline kai" phx-hook="FullScreen" id="fullscreen">全屏</button>
         </div>

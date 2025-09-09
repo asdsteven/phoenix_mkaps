@@ -9,8 +9,9 @@ defmodule MkapsWeb.BoardLive do
     {:ok,
      socket
      |> assign(highlights: MapSet.new())
-     |> assign(toggle_sentences: false)
-     |> assign(toggle_images: false)
+     |> assign(toggle_sentences: false, toggle_images: false)
+     |> assign(transforms_state: :pending)
+     |> assign(toggle_pan: true, toggle_zoom: false, toggle_rotate: false)
      |> allow_upload(:image,
      accept: :any,
      max_file_size: 1_000_000_000,
@@ -146,26 +147,54 @@ defmodule MkapsWeb.BoardLive do
     {:noreply, assign(socket, toggle_images: !socket.assigns.toggle_images)}
   end
 
-  def handle_event("reset", _params, socket) do
-    socket.assigns.slide |> Slide.changeset(%{item_xyzs: nil}) |> Repo.update!
-    socket.assigns.slide |> Slide.changeset(%{item_sizes: nil}) |> Repo.update!
-    lesson = Lesson |> preload(:slides) |> Repo.get!(socket.assigns.lesson.id)
+  def handle_event("toggle-pan", _params, socket) do
+    {:noreply, assign(socket, toggle_pan: !socket.assigns.toggle_pan)}
+  end
+
+  def handle_event("toggle-zoom", _params, socket) do
+    {:noreply, assign(socket, toggle_zoom: !socket.assigns.toggle_zoom)}
+  end
+
+  def handle_event("toggle-rotate", _params, socket) do
+    {:noreply, assign(socket, toggle_rotate: !socket.assigns.toggle_rotate)}
+  end
+
+  def handle_event("save-transforms", %{"slot" => slot}, socket) do
+    active_transforms = Map.get(socket.assigns.slide.transforms || %{}, "", %{})
+    transforms = Map.put(socket.assigns.slide.transforms || %{}, slot, active_transforms)
+    socket.assigns.slide |> Slide.changeset(%{transforms: transforms}) |> Repo.update!
     {:noreply,
      socket
-     |> assign(lesson: lesson)
-     |> assign(slide: Enum.find(lesson.slides, &(&1.position == socket.assigns.slide.position)))}
+     |> assign(transforms_state: :pending)
+     |> assign(slide: Slide |> Repo.get!(socket.assigns.slide.id))}
+  end
+
+  def handle_event("save-transforms", _params, socket) do
+    {:noreply, assign(socket, transforms_state: :save)}
+  end
+
+  def handle_event("apply-transforms", %{"slot" => slot}, socket) do
+    slot_transforms = Map.get(socket.assigns.slide.transforms || %{}, slot, %{})
+    transforms = Map.put(socket.assigns.slide.transforms || %{}, "", slot_transforms)
+    socket.assigns.slide |> Slide.changeset(%{transforms: transforms}) |> Repo.update!
+    {:noreply,
+     socket
+     |> assign(transforms_state: :pending)
+     |> assign(slide: Slide |> Repo.get!(socket.assigns.slide.id))}
+  end
+
+  def handle_event("apply-transforms", _params, socket) do
+    {:noreply, assign(socket, transforms_state: :apply)}
   end
 
   def handle_event("drag", %{"item" => item_id, "x" => x, "y" => y, "z" => z, "size" => size}, socket) do
-    item_xyzs = Map.put(socket.assigns.slide.item_xyzs || %{}, item_id, [x,y,z])
-    socket.assigns.slide |> Slide.changeset(%{item_xyzs: item_xyzs}) |> Repo.update!
-    item_sizes = Map.put(socket.assigns.slide.item_sizes || %{}, item_id, size)
-    socket.assigns.slide |> Slide.changeset(%{item_sizes: item_sizes}) |> Repo.update!
-    lesson = Lesson |> preload(:slides) |> Repo.get!(socket.assigns.lesson.id)
-    {:noreply,
-     socket
-     |> assign(lesson: lesson)
-     |> assign(slide: Enum.find(lesson.slides, &(&1.position == socket.assigns.slide.position)))}
+    active_transforms = Map.get(socket.assigns.slide.transforms || %{}, "", %{})
+    new_active_transforms = Map.put(active_transforms, item_id, [x,y,z,size])
+    IO.inspect(socket.assigns.slide.transforms)
+    transforms = Map.put(socket.assigns.slide.transforms || %{}, "", new_active_transforms)
+    IO.inspect(transforms)
+    socket.assigns.slide |> Slide.changeset(%{transforms: transforms}) |> Repo.update!
+    {:noreply, assign(socket, slide: Slide |> Repo.get!(socket.assigns.slide.id))}
   end
 
   def handle_event("log", %{"msg" => msg}, socket) do
@@ -208,27 +237,17 @@ defmodule MkapsWeb.BoardLive do
         end
       end
     end
-    {:noreply,
-     socket
-     |> assign(highlights: highlights)}
+    {:noreply, assign(socket, highlights: highlights)}
   end
 
-  defp get_font_size(item_sizes, id) do
-    px = Map.get(item_sizes || %{}, id, 72)
-    "font-size:#{px}px"
+  defp get_sentence_style(active_transforms, item_id) do
+    [x,y,z,px] = Map.get(active_transforms || %{}, item_id, [0,0,0,72])
+    "left:#{x}px;top:#{y}px;z-index:#{z};font-size:#{px}px"
   end
 
-  defp get_image_size(item_sizes, id) do
-    px = Map.get(item_sizes || %{}, id, 200)
-    "height:#{px}px"
-  end
-
-  defp get_xyz(item_xyzs, id) do
-    [x,y,z] = case Map.get(item_xyzs || %{}, id, [0,0,0]) do
-                [x,y,z] -> [x,y,z]
-                _ -> [0,0,0]
-              end
-    "left:#{x}px;top:#{y}px;z-index:#{z}"
+  defp get_image_style(active_transforms, item_id) do
+    [x,y,z,px] = Map.get(active_transforms || %{}, item_id, [0,0,0,200])
+    "left:#{x}px;top:#{y}px;z-index:#{z};width:#{px}px"
   end
 
   defp graphemes(s) do

@@ -21,13 +21,13 @@ Hooks.Touchable = {
       imageOrigins.set(el, {
         x: parseInt(el.style.left, 10),
         y: parseInt(el.style.top, 10),
-        height: parseInt(el.style.height, 10)
+        width: parseInt(el.style.width, 10)
       })
     }
 
     const getSize = (el) => {
       if (el.matches('.mkaps-sentence')) return parseInt(el.style.fontSize, 10)
-      if (el.matches('.mkaps-image')) return parseInt(el.style.height, 10)
+      if (el.matches('.mkaps-image')) return parseInt(el.style.width, 10)
     }
 
     const touchStart = (identifier, point) => {
@@ -50,7 +50,7 @@ Hooks.Touchable = {
           x: parseInt(el.style.left, 10),
           y: parseInt(el.style.top, 10),
           fontSize: parseInt(el.style.fontSize, 10),
-          height: parseInt(el.style.height, 10)
+          width: parseInt(el.style.width, 10)
         },
         x: point.clientX,
         y: point.clientY
@@ -99,7 +99,7 @@ Hooks.Touchable = {
       const len1 = Math.sqrt(Math.pow(t0.x - t1.x, 2) + Math.pow(t0.y - t1.y, 2))
       el.style.left = `${t0.x - Math.round((t0.origin.x - t0.elOrigin.x) * len1 / len0)}px`
       el.style.top = `${t0.y - Math.round((t0.origin.y - t0.elOrigin.y) * len1 / len0)}px`
-      el.style.height = `${Math.round(t0.elOrigin.height * len1 / len0)}px`
+      el.style.width = `${Math.round(t0.elOrigin.width * len1 / len0)}px`
     }
 
     const pinchBackground = (t0, t1) => {
@@ -114,11 +114,11 @@ Hooks.Touchable = {
         }
       }
       if (el.dataset.toggleImages !== undefined) {
-        for (const [e, {x, y, height}] of imageOrigins) {
+        for (const [e, {x, y, width}] of imageOrigins) {
           if (!cachedEls.has(e)) continue
           e.style.left = `${t0.x - Math.round((t0.origin.x - x) * len1 / len0)}px`
           e.style.top = `${t0.y - Math.round((t0.origin.y - y) * len1 / len0)}px`
-          e.style.height = `${Math.round(height * len1 / len0)}px`
+          e.style.width = `${Math.round(width * len1 / len0)}px`
         }
       }
     }
@@ -175,7 +175,7 @@ Hooks.Touchable = {
           imageOrigins.set(el, {
             x: parseInt(el.style.left, 10),
             y: parseInt(el.style.top, 10),
-            height: parseInt(el.style.height, 10)
+            width: parseInt(el.style.width, 10)
           })
         }
       }
@@ -245,7 +245,7 @@ Hooks.Touchable = {
             imageOrigins.set(e, {
               x: parseInt(e.style.left, 10),
               y: parseInt(e.style.top, 10),
-              height: parseInt(e.style.height, 10)
+              width: parseInt(e.style.width, 10)
             })
             inset(e)
           })
