@@ -278,7 +278,7 @@ defmodule MkapsWeb.BoardLive do
   end
 
   def handle_event("drag", %{"item" => item_id, "x" => x, "y" => y, "z" => z, "size" => size}, socket) do
-    active_transforms = Map.get(socket.assigns.slide.transforms, "", socket.assigns.auto_transforms)
+    active_transforms = Map.get(socket.assigns.slide.transforms || %{}, "", socket.assigns.auto_transforms)
     new_active_transforms = Map.put(active_transforms, item_id, [x,y,z,size])
     transforms = Map.put(socket.assigns.slide.transforms || %{}, "", new_active_transforms)
     slide = socket.assigns.slide |> Slide.changeset(%{transforms: transforms}) |> Repo.update!
@@ -461,7 +461,7 @@ defmodule MkapsWeb.BoardLive do
       nil
     else
       avatar = Map.get(slide.avatars || %{}, name)
-      Map.get(avatar || %{}, "hue", 6)
+      Map.get(avatar || %{}, "hue", 180)
     end
   end
 

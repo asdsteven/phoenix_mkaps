@@ -133,7 +133,7 @@
             </.link>
         </div>
         <div class="fixed bottom-0 left-0 flex flex-col z-9999" id="ui-left">
-            <%= if get_avatar_hue(@slide, @focus_id) !== nil do %>
+            <%= if get_avatar_name(@slide, @focus_id) do %>
                 <div class="join">
                     <button class="join-item btn btn-sm kai btn-outline"
                             phx-click="badge" phx-value-badge="👍">👍</button>
