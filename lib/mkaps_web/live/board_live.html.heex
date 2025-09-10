@@ -110,6 +110,9 @@
                               style={get_avatar_name_style(Map.get(@slide.transforms || %{}, "", %{}), "image-#{i}")}>
                             <%= String.replace_prefix(image, "avatar-", "") %>
                         </span>
+                        <span class="absolute rotate-14" style="top:9%;left:19%;width:48%">
+                            <%= Enum.join(Enum.map(get_avatar_badges(@slide, "image-#{i}"), &(Enum.at(&1, 0)))) %>
+                        </span>
                     </span>
                 <% else %>
                     <img class={["absolute h-auto shadow-sm/100 rounded-lg cursor-grab mkaps-touch-drag mkaps-image"]}
@@ -127,6 +130,16 @@
         </div>
         <div class="fixed bottom-0 left-0 flex flex-col z-9999" id="ui-left">
             <%= if get_avatar_hue(@slide, @focus_id) !== nil do %>
+                <div class="join">
+                    <button class="join-item btn btn-sm kai btn-outline"
+                            phx-click="badge" phx-value-badge="👍">👍</button>
+                    <button class="join-item btn btn-sm kai btn-outline"
+                            phx-click="badge" phx-value-badge="⭐">⭐</button>
+                    <button class="join-item btn btn-sm kai btn-outline"
+                            phx-click="badge" phx-value-badge="❤️">❤️</button>
+                    <button class="join-item btn btn-sm kai btn-outline"
+                            phx-click="delete-badge">X</button>
+                </div>
                 <div class="join">
                     <button class="join-item btn btn-sm kai btn-outline"
                             phx-click="hue-left">&lt;</button>

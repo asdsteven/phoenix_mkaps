@@ -137,7 +137,15 @@ defmodule MkapsWeb.BoardLive do
       File.cp!(path, dest)
       {:ok, nil}
     end)
-    {:noreply, socket}
+    images = Application.fetch_env!(:mkaps, MkapsWeb.FileLive)[:uploads_path]
+    |> File.ls!
+    |> Enum.filter(fn file ->
+      ext = file |> Path.extname |> String.downcase
+      ext in [".jpg", ".jpeg", ".png", ".gif", ".webp"]
+    end)
+    {:noreply,
+     socket
+     |> assign(progress: 0, images: images)}
   end
 
   def handle_event("toggle-sentences", _params, socket) do
@@ -218,21 +226,15 @@ defmodule MkapsWeb.BoardLive do
   def handle_event("hue-left", _params, socket) do
     slide = socket.assigns.slide
     focus_id = socket.assigns.focus_id
-    hue = get_avatar_hue(slide, focus_id)
-    new_socket = if hue != nil do
-      "image-" <> i = focus_id
-      "avatar-" <> name = Enum.at(String.split(slide.images, "\n"), String.to_integer(i))
+    name = get_avatar_name(slide, focus_id)
+    new_socket = if name == nil do
+      socket
+    else
       avatar = Map.get(slide.avatars || %{}, name)
-      new_avatar = if hue == 0 do
-        Map.put(avatar || %{}, "hue", 330)
-      else
-        Map.put(avatar || %{}, "hue", hue - 30)
-      end
+      new_avatar = Map.update(avatar || %{}, "hue", 330, &rem(&1 + 330, 360))
       avatars = Map.put(slide.avatars || %{}, name, new_avatar)
       slide |> Slide.changeset(%{avatars: avatars}) |> Repo.update!
       assign(socket, slide: Slide |> Repo.get!(slide.id))
-    else
-      socket
     end
     {:noreply, new_socket}
   end
@@ -240,21 +242,54 @@ defmodule MkapsWeb.BoardLive do
   def handle_event("hue-right", _params, socket) do
     slide = socket.assigns.slide
     focus_id = socket.assigns.focus_id
-    hue = get_avatar_hue(slide, focus_id)
-    new_socket = if hue != nil do
-      "image-" <> i = focus_id
-      "avatar-" <> name = Enum.at(String.split(slide.images, "\n"), String.to_integer(i))
+    name = get_avatar_name(slide, focus_id)
+    new_socket = if name == nil do
+      socket
+    else
       avatar = Map.get(slide.avatars || %{}, name)
-      new_avatar = if hue == 330 do
-        Map.put(avatar || %{}, "hue", 0)
-      else
-        Map.put(avatar || %{}, "hue", hue + 30)
-      end
+      new_avatar = Map.update(avatar || %{}, "hue", 30, &rem(&1 + 30, 360))
       avatars = Map.put(slide.avatars || %{}, name, new_avatar)
       slide |> Slide.changeset(%{avatars: avatars}) |> Repo.update!
       assign(socket, slide: Slide |> Repo.get!(slide.id))
-    else
+    end
+    {:noreply, new_socket}
+  end
+
+  def handle_event("badge", %{"badge" => badge}, socket) do
+    slide = socket.assigns.slide
+    focus_id = socket.assigns.focus_id
+    name = get_avatar_name(slide, focus_id)
+    new_socket = if name == nil do
       socket
+    else
+      avatar = Map.get(slide.avatars || %{}, name)
+      new_avatar = Map.update(avatar || %{}, "badges", [[badge]], &(&1 ++ [[badge]]))
+      avatars = Map.put(slide.avatars || %{}, name, new_avatar)
+      slide |> Slide.changeset(%{avatars: avatars}) |> Repo.update!
+      assign(socket, slide: Slide |> Repo.get!(slide.id))
+    end
+    {:noreply, new_socket}
+  end
+
+  def handle_event("delete-badge", _params, socket) do
+    slide = socket.assigns.slide
+    focus_id = socket.assigns.focus_id
+    name = get_avatar_name(slide, focus_id)
+    new_socket = if name == nil do
+      socket
+    else
+      avatar = Map.get(slide.avatars || %{}, name)
+      new_avatar = Map.update(avatar || %{}, "badges", [], fn badges ->
+        if badges == [] do
+          []
+        else
+          [_ | rest] = Enum.reverse(badges)
+          Enum.reverse(rest)
+        end
+      end)
+      avatars = Map.put(slide.avatars || %{}, name, new_avatar)
+      slide |> Slide.changeset(%{avatars: avatars}) |> Repo.update!
+      assign(socket, slide: Slide |> Repo.get!(slide.id))
     end
     {:noreply, new_socket}
   end
@@ -317,14 +352,33 @@ defmodule MkapsWeb.BoardLive do
     "font-size:#{round(px / 8)}px"
   end
 
-  defp get_avatar_hue(slide, focus_id) do
-    if slide && slide.images && focus_id && String.starts_with?(focus_id, "image-") do
-      "image-" <> i = focus_id
+  defp get_avatar_hue(slide, item_id) do
+    name = get_avatar_name(slide, item_id)
+    if name == nil do
+      nil
+    else
+      avatar = Map.get(slide.avatars || %{}, name)
+      Map.get(avatar || %{}, "hue", 0)
+    end
+  end
+
+  defp get_avatar_badges(slide, item_id) do
+    name = get_avatar_name(slide, item_id)
+    if name == nil do
+      nil
+    else
+      avatar = Map.get(slide.avatars || %{}, name)
+      Map.get(avatar || %{}, "badges", [])
+    end
+  end
+
+  defp get_avatar_name(slide, item_id) do
+    if slide && slide.images && item_id && String.starts_with?(item_id, "image-") do
+      "image-" <> i = item_id
       text = Enum.at(String.split(slide.images, "\n"), String.to_integer(i))
       if String.starts_with?(text, "avatar-") do
         "avatar-" <> name = text
-        avatar = Map.get(slide.avatars || %{}, name)
-        Map.get(avatar || %{}, "hue", 0)
+        name
       else
         nil
       end
