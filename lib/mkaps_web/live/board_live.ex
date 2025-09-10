@@ -14,6 +14,7 @@ defmodule MkapsWeb.BoardLive do
      |> assign(toggle_pan: true, toggle_zoom: false, toggle_rotate: false)
      |> assign(focus_id: nil)
      |> assign(image_frames: %{})
+     |> assign(lesson: nil)
      |> allow_upload(:image,
      accept: :any,
      max_file_size: 1_000_000_000,
@@ -21,17 +22,21 @@ defmodule MkapsWeb.BoardLive do
   end
 
   def handle_params(%{"lesson_id" => lesson_id, "slide_position" => slide_position}, _uri, socket) do
-    lesson = Lesson |> preload(:slides) |> Repo.get!(String.to_integer(lesson_id))
     position = String.to_integer(slide_position)
+    lesson = socket.assigns.lesson ||
+      Lesson |> preload(:slides) |> Repo.get!(String.to_integer(lesson_id))
+    slide = Enum.find(lesson.slides, &(&1.position == position))
     {:noreply,
      socket
      |> assign(lesson: lesson)
-     |> assign(slide: Enum.find(lesson.slides, &(&1.position == position)))
+     |> assign(slide: slide)
+     |> assign(auto_transforms: auto_transform(slide))
      |> assign(slide_position: position)}
   end
 
   def handle_params(%{"lesson_id" => lesson_id}, _uri, socket) do
     folder = Application.fetch_env!(:mkaps, MkapsWeb.FileLive)[:uploads_path]
+
     images = folder
     |> File.ls!
     |> Enum.filter(fn file ->
@@ -44,6 +49,7 @@ defmodule MkapsWeb.BoardLive do
     end)
     |> Enum.sort_by(fn {_file, ctime} -> ctime end, :desc)
     |> Enum.map(fn {file, _ctime} -> file end)
+
     {:noreply,
      socket
      |> assign(lesson: Lesson |> preload(:slides) |> Repo.get!(String.to_integer(lesson_id)))
@@ -145,7 +151,9 @@ defmodule MkapsWeb.BoardLive do
       File.cp!(path, dest)
       {:ok, nil}
     end)
+
     folder = Application.fetch_env!(:mkaps, MkapsWeb.FileLive)[:uploads_path]
+
     images = folder
     |> File.ls!
     |> Enum.filter(fn file ->
@@ -158,6 +166,7 @@ defmodule MkapsWeb.BoardLive do
     end)
     |> Enum.sort_by(fn {_file, ctime} -> ctime end, :desc)
     |> Enum.map(fn {file, _ctime} -> file end)
+
     {:noreply,
      socket
      |> assign(progress: 0, upload_images: images)}
@@ -188,17 +197,27 @@ defmodule MkapsWeb.BoardLive do
   end
 
   def handle_event("save-transforms", %{"slot" => slot}, socket) do
-    active_transforms = Map.get(socket.assigns.slide.transforms || %{}, "")
-    transforms = if active_transforms == nil do
-      Map.delete(socket.assigns.slide.transforms || %{}, slot)
+    if socket.assigns.slide.transforms do
+      active_transforms = Map.get(socket.assigns.slide.transforms, "")
+      transforms = if active_transforms do
+        Map.put(socket.assigns.slide.transforms, slot, active_transforms)
+      else
+        Map.delete(socket.assigns.slide.transforms, slot)
+      end
+      slide = socket.assigns.slide |> Slide.changeset(%{transforms: transforms}) |> Repo.update!
+      slides =
+        Enum.map(socket.assigns.lesson.slides, fn s ->
+          if s.id == slide.id, do: slide, else: s
+        end)
+      lesson = %{socket.assigns.lesson | slides: slides}
+      {:noreply,
+       socket
+       |> assign(transforms_state: :pending)
+       |> assign(slide: slide)
+       |> assign(lesson: lesson)}
     else
-      Map.put(socket.assigns.slide.transforms || %{}, slot, active_transforms)
+      {:noreply, socket}
     end
-    socket.assigns.slide |> Slide.changeset(%{transforms: transforms}) |> Repo.update!
-    {:noreply,
-     socket
-     |> assign(transforms_state: :pending)
-     |> assign(slide: Slide |> Repo.get!(socket.assigns.slide.id))}
   end
 
   def handle_event("save-transforms", _params, socket) do
@@ -206,13 +225,19 @@ defmodule MkapsWeb.BoardLive do
   end
 
   def handle_event("apply-transforms", %{"slot" => slot}, socket) do
-    slot_transforms = Map.get(socket.assigns.slide.transforms || %{}, slot)
-    transforms = Map.put(socket.assigns.slide.transforms || %{}, "", slot_transforms)
-    socket.assigns.slide |> Slide.changeset(%{transforms: transforms}) |> Repo.update!
+    slot_transforms = Map.get(socket.assigns.slide.transforms, slot)
+    transforms = Map.put(socket.assigns.slide.transforms, "", slot_transforms)
+    slide = socket.assigns.slide |> Slide.changeset(%{transforms: transforms}) |> Repo.update!
+    slides =
+      Enum.map(socket.assigns.lesson.slides, fn s ->
+        if s.id == slide.id, do: slide, else: s
+      end)
+    lesson = %{socket.assigns.lesson | slides: slides}
     {:noreply,
      socket
      |> assign(transforms_state: :pending)
-     |> assign(slide: Slide |> Repo.get!(socket.assigns.slide.id))}
+     |> assign(slide: slide)
+     |> assign(lesson: lesson)}
   end
 
   def handle_event("apply-transforms", _params, socket) do
@@ -220,11 +245,21 @@ defmodule MkapsWeb.BoardLive do
   end
 
   def handle_event("clear-transforms", _params, socket) do
-    transforms = Map.delete(socket.assigns.slide.transforms || %{}, "")
-    socket.assigns.slide |> Slide.changeset(%{transforms: transforms}) |> Repo.update!
-    {:noreply,
-     socket
-     |> assign(slide: Slide |> Repo.get!(socket.assigns.slide.id))}
+    if socket.assigns.slide.transforms do
+      transforms = Map.delete(socket.assigns.slide.transforms, "")
+      slide = socket.assigns.slide |> Slide.changeset(%{transforms: transforms}) |> Repo.update!
+      slides =
+        Enum.map(socket.assigns.lesson.slides, fn s ->
+          if s.id == slide.id, do: slide, else: s
+        end)
+      lesson = %{socket.assigns.lesson | slides: slides}
+      {:noreply,
+       socket
+       |> assign(slide: slide)
+       |> assign(lesson: lesson)}
+    else
+      {:noreply, socket}
+    end
   end
 
   def handle_event("cancel-transforms", _params, socket) do
@@ -236,75 +271,103 @@ defmodule MkapsWeb.BoardLive do
     image = Enum.at(String.split(socket.assigns.slide.images, "\n"), String.to_integer(i))
     frames = length(String.split(image, " "))
     image_frames = Map.update(socket.assigns.image_frames, item_id, rem(1, frames), &(rem(&1 + 1, frames)))
-    {:noreply, assign(socket, image_frames: image_frames)}
-  end
-
-  def handle_event("drag", %{"item" => item_id, "x" => x, "y" => y, "z" => z, "size" => size}, socket) do
-    active_transforms = Map.get(socket.assigns.slide.transforms || %{}, "", %{})
-    new_active_transforms = Map.put(active_transforms, item_id, [x,y,z,size])
-    transforms = Map.put(socket.assigns.slide.transforms || %{}, "", new_active_transforms)
-    socket.assigns.slide |> Slide.changeset(%{transforms: transforms}) |> Repo.update!
     {:noreply,
      socket
      |> assign(focus_id: item_id)
-     |> assign(slide: Slide |> Repo.get!(socket.assigns.slide.id))}
+     |> assign(image_frames: image_frames)}
+  end
+
+  def handle_event("drag", %{"item" => item_id, "x" => x, "y" => y, "z" => z, "size" => size}, socket) do
+    active_transforms = Map.get(socket.assigns.slide.transforms, "", socket.assigns.auto_transforms)
+    new_active_transforms = Map.put(active_transforms, item_id, [x,y,z,size])
+    transforms = Map.put(socket.assigns.slide.transforms || %{}, "", new_active_transforms)
+    slide = socket.assigns.slide |> Slide.changeset(%{transforms: transforms}) |> Repo.update!
+    slides =
+      Enum.map(socket.assigns.lesson.slides, fn s ->
+        if s.id == slide.id, do: slide, else: s
+      end)
+    lesson = %{socket.assigns.lesson | slides: slides}
+    {:noreply,
+     socket
+     |> assign(focus_id: item_id)
+     |> assign(slide: slide)
+     |> assign(lesson: lesson)}
   end
 
   def handle_event("hue-left", _params, socket) do
     slide = socket.assigns.slide
     focus_id = socket.assigns.focus_id
     name = get_avatar_name(slide, focus_id)
-    new_socket = if name == nil do
-      socket
-    else
+    if name do
       avatar = Map.get(slide.avatars || %{}, name)
       new_avatar = Map.update(avatar || %{}, "hue", 330, &rem(&1 + 330, 360))
       avatars = Map.put(slide.avatars || %{}, name, new_avatar)
-      slide |> Slide.changeset(%{avatars: avatars}) |> Repo.update!
-      assign(socket, slide: Slide |> Repo.get!(slide.id))
+      new_slide = slide |> Slide.changeset(%{avatars: avatars}) |> Repo.update!
+      slides =
+        Enum.map(socket.assigns.lesson.slides, fn s ->
+          if s.id == slide.id, do: slide, else: s
+        end)
+      lesson = %{socket.assigns.lesson | slides: slides}
+      {:noreply,
+       socket
+       |> assign(slide: new_slide)
+       |> assign(lesson: lesson)}
+    else
+      {:noreply, socket}
     end
-    {:noreply, new_socket}
   end
 
   def handle_event("hue-right", _params, socket) do
     slide = socket.assigns.slide
     focus_id = socket.assigns.focus_id
     name = get_avatar_name(slide, focus_id)
-    new_socket = if name == nil do
-      socket
-    else
+    if name do
       avatar = Map.get(slide.avatars || %{}, name)
       new_avatar = Map.update(avatar || %{}, "hue", 30, &rem(&1 + 30, 360))
       avatars = Map.put(slide.avatars || %{}, name, new_avatar)
-      slide |> Slide.changeset(%{avatars: avatars}) |> Repo.update!
-      assign(socket, slide: Slide |> Repo.get!(slide.id))
+      new_slide = slide |> Slide.changeset(%{avatars: avatars}) |> Repo.update!
+      slides =
+        Enum.map(socket.assigns.lesson.slides, fn s ->
+          if s.id == slide.id, do: slide, else: s
+        end)
+      lesson = %{socket.assigns.lesson | slides: slides}
+      {:noreply,
+       socket
+       |> assign(slide: new_slide)
+       |> assign(lesson: lesson)}
+    else
+      {:noreply, socket}
     end
-    {:noreply, new_socket}
   end
 
   def handle_event("badge", %{"badge" => badge}, socket) do
     slide = socket.assigns.slide
     focus_id = socket.assigns.focus_id
     name = get_avatar_name(slide, focus_id)
-    new_socket = if name == nil do
-      socket
-    else
+    if name do
       avatar = Map.get(slide.avatars || %{}, name)
       new_avatar = Map.update(avatar || %{}, "badges", [[badge]], &(&1 ++ [[badge]]))
       avatars = Map.put(slide.avatars || %{}, name, new_avatar)
-      slide |> Slide.changeset(%{avatars: avatars}) |> Repo.update!
-      assign(socket, slide: Slide |> Repo.get!(slide.id))
+      new_slide = slide |> Slide.changeset(%{avatars: avatars}) |> Repo.update!
+      slides =
+        Enum.map(socket.assigns.lesson.slides, fn s ->
+          if s.id == slide.id, do: slide, else: s
+        end)
+      lesson = %{socket.assigns.lesson | slides: slides}
+      {:noreply,
+       socket
+       |> assign(slide: new_slide)
+       |> assign(lesson: lesson)}
+    else
+      {:noreply, socket}
     end
-    {:noreply, new_socket}
   end
 
   def handle_event("delete-badge", _params, socket) do
     slide = socket.assigns.slide
     focus_id = socket.assigns.focus_id
     name = get_avatar_name(slide, focus_id)
-    new_socket = if name == nil do
-      socket
-    else
+    if name do
       avatar = Map.get(slide.avatars || %{}, name)
       new_avatar = Map.update(avatar || %{}, "badges", [], fn badges ->
         if badges == [] do
@@ -315,10 +378,19 @@ defmodule MkapsWeb.BoardLive do
         end
       end)
       avatars = Map.put(slide.avatars || %{}, name, new_avatar)
-      slide |> Slide.changeset(%{avatars: avatars}) |> Repo.update!
-      assign(socket, slide: Slide |> Repo.get!(slide.id))
+      new_slide = slide |> Slide.changeset(%{avatars: avatars}) |> Repo.update!
+      slides =
+        Enum.map(socket.assigns.lesson.slides, fn s ->
+          if s.id == slide.id, do: slide, else: s
+        end)
+      lesson = %{socket.assigns.lesson | slides: slides}
+      {:noreply,
+       socket
+       |> assign(slide: new_slide)
+       |> assign(lesson: lesson)}
+    else
+      {:noreply, socket}
     end
-    {:noreply, new_socket}
   end
 
   def handle_event("log", %{"msg" => msg}, socket) do
@@ -330,21 +402,22 @@ defmodule MkapsWeb.BoardLive do
     [_slide_id, i, j] = String.split(key, "-")
     slide = socket.assigns.slide
     sentence = Enum.at(String.split(slide.sentences, "\n"), String.to_integer(i))
-    {belongs_here, acc} = Enum.reduce(Enum.with_index(graphemes(sentence)), {0, []}, fn {{grapheme, _deco}, k}, {belongs_here, acc} ->
-      if belongs_here == 2 do
-        {2, acc}
-      else
-        if is_ascii_letter_or_digit(grapheme) do
-          {(if k == String.to_integer(j), do: 1, else: belongs_here), [k | acc]}
+    {belongs_here, acc} =
+      Enum.reduce(Enum.with_index(graphemes(sentence)), {0, []}, fn {{grapheme, _deco}, k}, {belongs_here, acc} ->
+        if belongs_here == 2 do
+          {2, acc}
         else
-          if belongs_here == 1 do
-            {2, acc}
+          if is_ascii_letter_or_digit(grapheme) do
+            {(if k == String.to_integer(j), do: 1, else: belongs_here), [k | acc]}
           else
-            {0, []}
+            if belongs_here == 1 do
+              {2, acc}
+            else
+              {0, []}
+            end
           end
         end
-      end
-    end)
+      end)
     neighbours = if belongs_here == 0, do: [], else: acc
     highlight_count = Enum.count(neighbours, &MapSet.member?(socket.assigns.highlights, "#{slide.id}-#{i}-#{&1}"))
     highlights = if highlight_count >= 2 and highlight_count == length(neighbours) do
@@ -364,12 +437,12 @@ defmodule MkapsWeb.BoardLive do
   end
 
   defp get_sentence_style(active_transforms, item_id) do
-    [x,y,z,px] = Map.get(active_transforms || %{}, item_id, [0,0,0,72])
+    [x,y,z,px] = Map.get(active_transforms, item_id, [0,0,1,60])
     "left:#{x}px;top:#{y}px;z-index:#{z};font-size:#{px}px"
   end
 
   defp get_image_style(active_transforms, item_id, z9999 \\ false) do
-    [x,y,z,px] = Map.get(active_transforms || %{}, item_id, [0,0,0,200])
+    [x,y,z,px] = Map.get(active_transforms, item_id, [0,0,1,200])
     if z9999 do
       "left:#{x}px;top:#{y}px;z-index:9999;width:#{px}px"
     else
@@ -378,7 +451,7 @@ defmodule MkapsWeb.BoardLive do
   end
 
   defp get_avatar_name_style(active_transforms, item_id) do
-    [_,_,_,px] = Map.get(active_transforms || %{}, item_id, [0,0,0,200])
+    [_,_,_,px] = Map.get(active_transforms, item_id)
     "font-size:#{round(px / 8)}px"
   end
 
@@ -417,6 +490,59 @@ defmodule MkapsWeb.BoardLive do
     end
   end
 
+  defp is_word?(s), do: String.length(s) < 10
+
+  defp auto_transform(slide) do
+    words_per_row = 7
+    images_per_row = 7
+
+    sentences = String.split(slide.sentences || "", "\n")
+    images = String.split(slide.images || "", "\n")
+    sentence_rows = Enum.sum_by(Enum.chunk_by(sentences, &is_word?/1), fn [e | rest] ->
+      if is_word?(e) do
+        Float.ceil(length([e | rest]) / words_per_row)
+      else
+        length([e | rest]) # one sentence per row
+      end
+    end)
+    image_rows = Float.ceil(length(images) / 10) # ten images per row
+    dy = 720 / (sentence_rows + image_rows)
+    a = auto_transform_sentences(sentences, dy, words_per_row)
+    b = auto_transform_images(images, sentence_rows * dy, dy, images_per_row, length(sentences)+1)
+    Map.merge(a, b)
+  end
+
+  defp auto_transform_sentences(sentences, dy, words_per_row) do
+    dx = 1280 / words_per_row
+    separate = Enum.concat(Enum.map(Enum.chunk_by(sentences, &is_word?/1), fn [e | rest] ->
+          if is_word?(e) do
+            [[e | rest]]
+          else
+            Enum.map([e | rest], &([&1]))
+          end
+        end))
+    l = Enum.concat(Enum.with_index(separate, fn [e | rest], y ->
+          if is_word?(e) do
+            Enum.with_index([e | rest], fn _word, x ->
+              [100 + round(x * dx), 100 + round(y * dy), 0, 48]
+            end)
+          else
+            [[100, 100 + round(y * dy), 0, 60]]
+          end
+        end))
+    Map.new(Enum.with_index(l, fn [x,y,_,px], i -> {"sentence-#{i}", [x,y,1+i,px]} end))
+  end
+
+  defp auto_transform_images(images, begin_y, dy, images_per_row, begin_z) do
+    dx = 1280 / images_per_row
+    l = Enum.concat(Enum.with_index(Enum.chunk_every(images, images_per_row), fn row, y ->
+          Enum.with_index(row, fn _image, x ->
+            [100 + round(x * dx), round(begin_y + y * dy), 0, 200]
+          end)
+        end))
+    Map.new(Enum.with_index(l, fn [x,y,_,px], i -> {"image-#{i}", [x,y,begin_z+i,px]} end))
+  end
+
   defp graphemes(s) do
     parse_graphemes(String.graphemes(s), [])
   end
@@ -441,11 +567,11 @@ defmodule MkapsWeb.BoardLive do
 
   defp parse_graphemes([char | rest], acc) do
     if is_ascii_letter_or_digit(char) and false do
-        {group, remaining} = collect_while([char | rest], &is_ascii_letter_or_digit/1, [])
-        merged = Enum.join(group)
-        parse_graphemes(remaining, [{merged, nil} | acc])
+      {group, remaining} = collect_while([char | rest], &is_ascii_letter_or_digit/1, [])
+      merged = Enum.join(group)
+      parse_graphemes(remaining, [{merged, nil} | acc])
     else
-        parse_graphemes(rest, [{char, nil} | acc])
+      parse_graphemes(rest, [{char, nil} | acc])
     end
   end
 

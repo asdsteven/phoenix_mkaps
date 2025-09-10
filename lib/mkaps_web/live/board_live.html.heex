@@ -84,7 +84,7 @@
         <%= if @slide && @slide.sentences do %>
             <span class={["absolute w-max max-w-[1200px] px-[0.4em] py-[0.1em] rounded-lg bg-stone-100 shadow-sm/100 text-black leading-[1.1] kai cursor-grab mkaps-touch-drag mkaps-sentence"]}
                   phx-hook="Touchable" id={"sentence-#{i}"}
-                  style={get_sentence_style(Map.get(@slide.transforms || %{}, "", %{}), "sentence-#{i}")}
+                  style={get_sentence_style(Map.get(@slide.transforms || %{}, "", @auto_transforms), "sentence-#{i}")}
                   :for={{sentence, i} <- Enum.with_index(String.split(@slide.sentences, "\n"))}>
                 <span :for={{{grapheme, deco}, j} <- Enum.with_index(graphemes(sentence))}
                       phx-hook="Touchable" id={"#{@slide.id}-#{i}-#{j}"}
@@ -106,11 +106,11 @@
                 <%= if String.starts_with?(image, "avatar-") do %>
                     <span class="absolute h-auto cursor-grab mkaps-touch-drag mkaps-image"
                           phx-hook="Touchable" id={"image-#{i}"}
-                          style={get_image_style(Map.get(@slide.transforms || %{}, "", %{}), "image-#{i}")}>
+                          style={get_image_style(Map.get(@slide.transforms || %{}, "", @auto_transforms), "image-#{i}")}>
                         <img style={"filter:hue-rotate(#{get_avatar_hue(@slide, "image-#{i}")}deg) brightness(1.5)"}
                              src="/uploads/3d52f5cc-e171-4f8d-9e0b-b5d901e9e9cb.png" draggable="false">
                         <span class="absolute bottom-[9%] left-[26%] -translate-x-1/2 rotate-14 text-black kai"
-                              style={get_avatar_name_style(Map.get(@slide.transforms || %{}, "", %{}), "image-#{i}") <> ";text-shadow: 0 0 4px white"}>
+                              style={get_avatar_name_style(Map.get(@slide.transforms || %{}, "", @auto_transforms), "image-#{i}") <> ";text-shadow: 0 0 4px white"}>
                             <%= String.replace_prefix(image, "avatar-", "") %>
                         </span>
                         <span class="absolute rotate-14" style="top:9%;left:19%;width:48%;text-shadow: 0 0 4px white">
@@ -121,7 +121,7 @@
                     <img class="absolute h-auto shadow-sm/100 rounded-lg cursor-grab mkaps-touch-drag mkaps-image mkaps-touch-tap"
                          src={Enum.at(String.split(String.replace_prefix(image, "9999-", ""), " "), Map.get(@image_frames, "image-#{i}", 0))}
                          phx-hook="Touchable" id={"image-#{i}"} draggable="false"
-                         style={get_image_style(Map.get(@slide.transforms || %{}, "", %{}), "image-#{i}", String.starts_with?(image, "9999-"))}>
+                         style={get_image_style(Map.get(@slide.transforms || %{}, "", @auto_transforms), "image-#{i}", String.starts_with?(image, "9999-"))}>
                 <% end %>
             <% end %>
         <% end %>
@@ -179,7 +179,8 @@
                 <% end %>
                 <%= if @transforms_state == :pending do %>
                     <button class={"join-item btn btn-sm kai btn-outline"}
-                            phx-click="save-transforms">存</button>
+                            phx-click="save-transforms"
+                            disabled={!Map.has_key?(@slide.transforms || %{}, "")}>存</button>
                     <button class={"join-item btn btn-sm kai btn-outline"}
                             phx-click="apply-transforms">用</button>
                     <button class={"join-item btn btn-sm kai btn-outline"}
