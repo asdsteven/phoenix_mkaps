@@ -77,11 +77,11 @@ Hooks.Touchable = {
       const moved = t.moved
       t.moved ||= Math.abs(t.x - t.origin.x) >= 10
       t.moved ||= Math.abs(t.y - t.origin.y) >= 10
-      if (!moved && t.moved && el.matches('.mkaps-touch-drag')) {
+      if (!moved && t.moved && el.matches('.mkaps-touch-drag') && parseInt(el.style.zIndex, 10) < 9999) {
         // quite unpredictable, but efficient
         const allZ = Array.from(document.querySelectorAll('.mkaps-touch-drag'))
-                          .filter(e => e !== el).map(e => parseInt(e.style.zIndex, 10))
-        el.style.zIndex = Math.max(...allZ) + 1
+                          .filter(e => e !== el && parseInt(e.style.zIndex, 10) < 9999).map(e => parseInt(e.style.zIndex, 10))
+        el.style.zIndex = Math.max(0, ...allZ) + 1
       }
       return t.moved && t.isMain
     }
@@ -126,7 +126,7 @@ Hooks.Touchable = {
     const touchMoved = () => {
       const mainTouches = touches.filter(t => t.isMain)
       if (mainTouches.length == 1) {
-        if (document.getElementById('background').dataset.togglePan === undefined) return
+        if (document.getElementById('background')?.dataset.togglePan === undefined) return
         const t = mainTouches[0]
         if (el.matches('.mkaps-touch-drag')) {
           el.style.left = `${t.elOrigin.x + t.x - t.origin.x}px`
@@ -148,7 +148,7 @@ Hooks.Touchable = {
           }
         }
       } else {
-        if (document.getElementById('background').dataset.toggleZoom === undefined) return
+        if (document.getElementById('background')?.dataset.toggleZoom === undefined) return
         if (el.matches('.mkaps-sentence')) pinchSentence(mainTouches[0], mainTouches[1])
         if (el.matches('.mkaps-image')) pinchImage(mainTouches[0], mainTouches[1])
         if (el.id == 'background') pinchBackground(mainTouches[0], mainTouches[1])
@@ -159,9 +159,16 @@ Hooks.Touchable = {
       const i = touches.findIndex(t => t.identifier == identifier)
       if (i == -1) return false
       if (el.matches('.mkaps-touch-tap') && !touches[i].moved) {
-        this.pushEvent("toggle-highlight", {
-          key: el.id
-        })
+        if (el.matches('.mkaps-grapheme')) {
+          this.pushEvent("toggle-highlight", {
+            key: el.id
+          })
+        }
+        if (el.matches('.mkaps-image')) {
+          this.pushEvent('flip', {
+            item: el.id
+          })
+        }
       }
       touches.splice(i, 1)
       if (touches.length == 0) {
@@ -185,7 +192,7 @@ Hooks.Touchable = {
     }
 
     const inset = (el) => {
-      let z = el.style.zIndex
+      let z = parseInt(el.style.zIndex, 10)
       const rect = el.getBoundingClientRect()
       for (const e of document.querySelectorAll('.mkaps-touch-drag')) {
         if (e === el) continue
@@ -197,7 +204,7 @@ Hooks.Touchable = {
       }
       for (const e of document.querySelectorAll('.mkaps-touch-drag')) {
         if (e === el) continue
-        if (parseInt(e.style.zIndex, 10) >= z) {
+        if (parseInt(e.style.zIndex, 10) >= z && parseInt(e.style.zIndex, 10) < 9999) {
           e.style.zIndex = parseInt(e.style.zIndex, 10) + 1
           this.pushEvent("drag", {
             item: e.id,
@@ -208,7 +215,7 @@ Hooks.Touchable = {
           })
         }
       }
-      el.style.zIndex = z
+      if (parseInt(el.style.zIndex, 10) < 9999) el.style.zIndex = z
       this.pushEvent("drag", {
         item: el.id,
         x: parseInt(el.style.left, 10),
@@ -258,11 +265,11 @@ Hooks.Touchable = {
     const backgroundActive = () => el.dataset.toggleSentences !== undefined || el.dataset.toggleImages !== undefined
     const backgroundActiveSentences = () => {
       const el = document.getElementById('background')
-      return el.dataset.toggleSentences !== undefined && el.dataset.toggleImages === undefined
+      return el?.dataset.toggleSentences !== undefined && el.dataset.toggleImages === undefined
     }
     const backgroundActiveImages = () => {
       const el = document.getElementById('background')
-      return el.dataset.toggleSentences === undefined && el.dataset.toggleImages !== undefined
+      return el?.dataset.toggleSentences === undefined && el.dataset.toggleImages !== undefined
     }
 
     el.addEventListener("mousedown", (e) => {
@@ -286,10 +293,11 @@ Hooks.Touchable = {
       if (touchMove('mouse', e)) touchMoved()
     })
     window.addEventListener("touchmove", (e) => {
-      e.preventDefault()
+      if (document.getElementById('background')?.dataset.toggleScroll === undefined) e.preventDefault()
       let mainMoved = false
       for (const touch of e.changedTouches) {
         if (!touchMove(touch.identifier, touch)) continue
+        e.preventDefault()
         mainMoved = true
       }
       if (mainMoved) touchMoved()

@@ -1,4 +1,5 @@
 <%= if @live_action == :index do %>
+    <a href="https://sw.hkep.com/?semester=3A&unit=1&lesson=2&words=t311021&access_token=TXBzeWF5cnhVQ01sSlh0RmllVVUzMXFoaTk1blVITDFybUM1TVJGTmNZZnFQR21FWFpPR1dscmZ6b2FUb0dmLw==">abc</a>
     <form :for={lesson <- @lessons} phx-submit="save-lesson" phx-change="change-lesson" class="m-2">
         <span><%= lesson.position %></span>
         <input type="hidden" name="lesson" value={lesson.id}>
@@ -43,7 +44,8 @@
             <.link class="join-item btn btn-accent" patch={~p"/lessons/#{@lesson.id}/slides/#{slide.position}"}>Play</.link>
         </div>
         <div :if={slide.images}>
-            <img :for={image <- String.split(slide.images, "\n")} src={image} class="h-24 w-auto inline m-1">
+            <img :for={image <- String.split(slide.images, "\n")} src={String.replace_prefix(Enum.at(String.split(image, " "), 0), "9999-", "")}
+                 class="h-24 w-auto inline m-1">
         </div>
     </form>
     <form phx-submit="create-slide" phx-change="change-slide" class="m-2">
@@ -63,7 +65,7 @@
     <div>Click one of them to copy image link</div>
     <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
         <div class="flex flex-col items-center space-y-2"
-            :for={image <- @images} phx-hook="CopyOnClick" data-copy-text={"/uploads/#{image}"} id={"image-#{image}"}>
+            :for={image <- @upload_images} phx-hook="CopyOnClick" data-copy-text={"/uploads/#{image}"} id={"image-#{image}"}>
             <span><%= image %></span>
             <img src={"/uploads/#{image}"} class="w-full max-w-xs max-h-64 object-contain">
         </div>
@@ -71,21 +73,22 @@
 <% end %>
 
 <%= if @live_action == :slide do %>
-    <div class="w-[1280px] h-[720px] bg-[url(/images/background1.jpg)] bg-cover bg-center relative select-none overflow-hidden">
+    <div class="w-[1280px] h-[720px] bg-[url(/images/background1.jpg)] bg-cover bg-center relative overflow-hidden select-none">
         <div class="absolute inset-0 bg-zinc-800/90 pointer-events-none"></div>
         <div class={["w-[1280px] h-[720px]",
                    (@toggle_sentences || @toggle_images) && "cursor-grab"]}
-             phx-hook="Touchable" id="background" data-toggle-sentences={@toggle_sentences} data-toggle-images={@toggle_images}
+             phx-hook="Touchable" id="background"
+             data-toggle-scroll={@toggle_scroll} data-toggle-sentences={@toggle_sentences} data-toggle-images={@toggle_images}
              data-toggle-pan={@toggle_pan} data-toggle-zoom={@toggle_zoom} data-toggle-rotate={@toggle_rotate}>
 ></div>
         <%= if @slide && @slide.sentences do %>
-            <span class={["absolute px-[0.4em] py-[0.1em] rounded-lg bg-stone-100 shadow-sm/100 text-black leading-[1.1] kai cursor-grab mkaps-touch-drag mkaps-sentence"]}
+            <span class={["absolute w-max max-w-[1200px] px-[0.4em] py-[0.1em] rounded-lg bg-stone-100 shadow-sm/100 text-black leading-[1.1] kai cursor-grab mkaps-touch-drag mkaps-sentence"]}
                   phx-hook="Touchable" id={"sentence-#{i}"}
                   style={get_sentence_style(Map.get(@slide.transforms || %{}, "", %{}), "sentence-#{i}")}
                   :for={{sentence, i} <- Enum.with_index(String.split(@slide.sentences, "\n"))}>
                 <span :for={{{grapheme, deco}, j} <- Enum.with_index(graphemes(sentence))}
                       phx-hook="Touchable" id={"#{@slide.id}-#{i}-#{j}"}
-                      class={["inline-block mkaps-touch-tap",
+                      class={["inline-block mkaps-touch-tap mkaps-grapheme",
                            MapSet.member?(@highlights, "#{@slide.id}-#{i}-#{j}") && "text-violet-900 bg-violet-200",
                            !MapSet.member?(@highlights, "#{@slide.id}-#{i}-#{j-1}") && "rounded-l-md",
                            !MapSet.member?(@highlights, "#{@slide.id}-#{i}-#{j+1}") && "rounded-r-md",
@@ -107,17 +110,18 @@
                         <img style={"filter:hue-rotate(#{get_avatar_hue(@slide, "image-#{i}")}deg) brightness(1.5)"}
                              src="/uploads/3d52f5cc-e171-4f8d-9e0b-b5d901e9e9cb.png" draggable="false">
                         <span class="absolute bottom-[9%] left-[26%] -translate-x-1/2 rotate-14 text-black kai"
-                              style={get_avatar_name_style(Map.get(@slide.transforms || %{}, "", %{}), "image-#{i}")}>
+                              style={get_avatar_name_style(Map.get(@slide.transforms || %{}, "", %{}), "image-#{i}") <> ";text-shadow: 0 0 4px white"}>
                             <%= String.replace_prefix(image, "avatar-", "") %>
                         </span>
-                        <span class="absolute rotate-14" style="top:9%;left:19%;width:48%">
+                        <span class="absolute rotate-14" style="top:9%;left:19%;width:48%;text-shadow: 0 0 4px white">
                             <%= Enum.join(Enum.map(get_avatar_badges(@slide, "image-#{i}"), &(Enum.at(&1, 0)))) %>
                         </span>
                     </span>
                 <% else %>
-                    <img class={["absolute h-auto shadow-sm/100 rounded-lg cursor-grab mkaps-touch-drag mkaps-image"]}
-                         src={image} phx-hook="Touchable" id={"image-#{i}"} draggable="false"
-                         style={get_image_style(Map.get(@slide.transforms || %{}, "", %{}), "image-#{i}")}>
+                    <img class="absolute h-auto shadow-sm/100 rounded-lg cursor-grab mkaps-touch-drag mkaps-image mkaps-touch-tap"
+                         src={Enum.at(String.split(String.replace_prefix(image, "9999-", ""), " "), Map.get(@image_frames, "image-#{i}", 0))}
+                         phx-hook="Touchable" id={"image-#{i}"} draggable="false"
+                         style={get_image_style(Map.get(@slide.transforms || %{}, "", %{}), "image-#{i}", String.starts_with?(image, "9999-"))}>
                 <% end %>
             <% end %>
         <% end %>
@@ -148,7 +152,9 @@
                             phx-click="hue-right">&gt;</button>
                 </div>
             <% end %>
-            <div class="join tooltip tooltip-right" data-tip="輕觸背景操控所有字或圖">
+            <div class="join tooltip tooltip-right" data-tip="輕觸背景滾動，或操控所有字/圖">
+                <button class={"join-item btn btn-sm kai #{if @toggle_scroll, do: "btn-primary", else: "btn-outline"}"}
+                        phx-click="toggle-scroll">滾</button>
                 <button class={"join-item btn btn-sm kai #{if @toggle_sentences, do: "btn-primary", else: "btn-outline"}"}
                         phx-click="toggle-sentences">字</button>
                 <button class={"join-item btn btn-sm kai #{if @toggle_images, do: "btn-primary", else: "btn-outline"}"}

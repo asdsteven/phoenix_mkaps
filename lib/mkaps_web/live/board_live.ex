@@ -9,10 +9,11 @@ defmodule MkapsWeb.BoardLive do
     {:ok,
      socket
      |> assign(highlights: MapSet.new())
-     |> assign(toggle_sentences: false, toggle_images: false)
+     |> assign(toggle_scroll: true, toggle_sentences: false, toggle_images: false)
      |> assign(transforms_state: :pending)
      |> assign(toggle_pan: true, toggle_zoom: false, toggle_rotate: false)
      |> assign(focus_id: nil)
+     |> assign(image_frames: %{})
      |> allow_upload(:image,
      accept: :any,
      max_file_size: 1_000_000_000,
@@ -30,17 +31,24 @@ defmodule MkapsWeb.BoardLive do
   end
 
   def handle_params(%{"lesson_id" => lesson_id}, _uri, socket) do
-    images = Application.fetch_env!(:mkaps, MkapsWeb.FileLive)[:uploads_path]
+    folder = Application.fetch_env!(:mkaps, MkapsWeb.FileLive)[:uploads_path]
+    images = folder
     |> File.ls!
     |> Enum.filter(fn file ->
       ext = file |> Path.extname |> String.downcase
       ext in [".jpg", ".jpeg", ".png", ".gif", ".webp"]
     end)
+    |> Enum.map(fn file ->
+      path = Path.join(folder, file)
+      {file, File.stat!(path).ctime}
+    end)
+    |> Enum.sort_by(fn {_file, ctime} -> ctime end, :desc)
+    |> Enum.map(fn {file, _ctime} -> file end)
     {:noreply,
      socket
      |> assign(lesson: Lesson |> preload(:slides) |> Repo.get!(String.to_integer(lesson_id)))
      |> assign(pending_saves: MapSet.new())
-     |> assign(progress: 0, images: images)}
+     |> assign(progress: 0, upload_images: images)}
   end
 
   def handle_params(_params, _uri, socket) do
@@ -137,15 +145,26 @@ defmodule MkapsWeb.BoardLive do
       File.cp!(path, dest)
       {:ok, nil}
     end)
-    images = Application.fetch_env!(:mkaps, MkapsWeb.FileLive)[:uploads_path]
+    folder = Application.fetch_env!(:mkaps, MkapsWeb.FileLive)[:uploads_path]
+    images = folder
     |> File.ls!
     |> Enum.filter(fn file ->
       ext = file |> Path.extname |> String.downcase
       ext in [".jpg", ".jpeg", ".png", ".gif", ".webp"]
     end)
+    |> Enum.map(fn file ->
+      path = Path.join(folder, file)
+      {file, File.stat!(path).ctime}
+    end)
+    |> Enum.sort_by(fn {_file, ctime} -> ctime end, :desc)
+    |> Enum.map(fn {file, _ctime} -> file end)
     {:noreply,
      socket
-     |> assign(progress: 0, images: images)}
+     |> assign(progress: 0, upload_images: images)}
+  end
+
+  def handle_event("toggle-scroll", _params, socket) do
+    {:noreply, assign(socket, toggle_scroll: !socket.assigns.toggle_scroll)}
   end
 
   def handle_event("toggle-sentences", _params, socket) do
@@ -210,6 +229,14 @@ defmodule MkapsWeb.BoardLive do
 
   def handle_event("cancel-transforms", _params, socket) do
     {:noreply, assign(socket, transforms_state: :pending)}
+  end
+
+  def handle_event("flip", %{"item" => item_id}, socket) do
+    "image-" <> i = item_id
+    image = Enum.at(String.split(socket.assigns.slide.images, "\n"), String.to_integer(i))
+    frames = length(String.split(image, " "))
+    image_frames = Map.update(socket.assigns.image_frames, item_id, rem(1, frames), &(rem(&1 + 1, frames)))
+    {:noreply, assign(socket, image_frames: image_frames)}
   end
 
   def handle_event("drag", %{"item" => item_id, "x" => x, "y" => y, "z" => z, "size" => size}, socket) do
@@ -320,8 +347,7 @@ defmodule MkapsWeb.BoardLive do
     end)
     neighbours = if belongs_here == 0, do: [], else: acc
     highlight_count = Enum.count(neighbours, &MapSet.member?(socket.assigns.highlights, "#{slide.id}-#{i}-#{&1}"))
-    highlights =
-    if highlight_count > 0 and highlight_count == length(neighbours) do
+    highlights = if highlight_count >= 2 and highlight_count == length(neighbours) do
       MapSet.put(Enum.reduce(neighbours, socket.assigns.highlights, &MapSet.delete(&2, "#{slide.id}-#{i}-#{&1}")), key)
     else
       if highlight_count == 0 and length(neighbours) > 0 do
@@ -342,9 +368,13 @@ defmodule MkapsWeb.BoardLive do
     "left:#{x}px;top:#{y}px;z-index:#{z};font-size:#{px}px"
   end
 
-  defp get_image_style(active_transforms, item_id) do
+  defp get_image_style(active_transforms, item_id, z9999 \\ false) do
     [x,y,z,px] = Map.get(active_transforms || %{}, item_id, [0,0,0,200])
-    "left:#{x}px;top:#{y}px;z-index:#{z};width:#{px}px"
+    if z9999 do
+      "left:#{x}px;top:#{y}px;z-index:9999;width:#{px}px"
+    else
+      "left:#{x}px;top:#{y}px;z-index:#{z};width:#{px}px"
+    end
   end
 
   defp get_avatar_name_style(active_transforms, item_id) do
@@ -358,7 +388,7 @@ defmodule MkapsWeb.BoardLive do
       nil
     else
       avatar = Map.get(slide.avatars || %{}, name)
-      Map.get(avatar || %{}, "hue", 0)
+      Map.get(avatar || %{}, "hue", 6)
     end
   end
 
