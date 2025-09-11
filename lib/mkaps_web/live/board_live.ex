@@ -12,7 +12,6 @@ defmodule MkapsWeb.BoardLive do
      |> assign(toggle_scroll: true, toggle_sentences: false, toggle_images: false)
      |> assign(transforms_state: :pending)
      |> assign(toggle_pan: true, toggle_zoom: false, toggle_rotate: false)
-     |> assign(focus_id: nil)
      |> assign(image_frames: %{})
      |> assign(lesson: nil)
      |> allow_upload(:image,
@@ -31,7 +30,8 @@ defmodule MkapsWeb.BoardLive do
      |> assign(lesson: lesson)
      |> assign(slide: slide)
      |> assign(auto_transforms: auto_transform(slide))
-     |> assign(slide_position: position)}
+     |> assign(slide_position: position)
+     |> assign(focus_id: nil)}
   end
 
   def handle_params(%{"lesson_id" => lesson_id}, _uri, socket) do
@@ -300,7 +300,7 @@ defmodule MkapsWeb.BoardLive do
     name = get_avatar_name(slide, focus_id)
     if name do
       avatar = Map.get(slide.avatars || %{}, name)
-      new_avatar = Map.update(avatar || %{}, "hue", 330, &rem(&1 + 330, 360))
+      new_avatar = Map.update(avatar || %{}, "hue", 150, &rem(&1 + 330, 360))
       avatars = Map.put(slide.avatars || %{}, name, new_avatar)
       new_slide = slide |> Slide.changeset(%{avatars: avatars}) |> Repo.update!
       slides =
@@ -323,7 +323,7 @@ defmodule MkapsWeb.BoardLive do
     name = get_avatar_name(slide, focus_id)
     if name do
       avatar = Map.get(slide.avatars || %{}, name)
-      new_avatar = Map.update(avatar || %{}, "hue", 30, &rem(&1 + 30, 360))
+      new_avatar = Map.update(avatar || %{}, "hue", 210, &rem(&1 + 30, 360))
       avatars = Map.put(slide.avatars || %{}, name, new_avatar)
       new_slide = slide |> Slide.changeset(%{avatars: avatars}) |> Repo.update!
       slides =

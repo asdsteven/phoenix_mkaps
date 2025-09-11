@@ -1,5 +1,6 @@
 <%= if @live_action == :index do %>
     <a href="https://sw.hkep.com/?semester=3A&unit=1&lesson=2&words=t311021&access_token=TXBzeWF5cnhVQ01sSlh0RmllVVUzMXFoaTk1blVITDFybUM1TVJGTmNZZnFQR21FWFpPR1dscmZ6b2FUb0dmLw==">abc</a>
+    <a href="https://www.youtube.com/watch?v=tMgzwJ8Sl2U">繡字</a>
     <form :for={lesson <- @lessons} phx-submit="save-lesson" phx-change="change-lesson" class="m-2">
         <span><%= lesson.position %></span>
         <input type="hidden" name="lesson" value={lesson.id}>
@@ -108,7 +109,7 @@
                           phx-hook="Touchable" id={"image-#{i}"}
                           style={get_image_style(Map.get(@slide.transforms || %{}, "", @auto_transforms), "image-#{i}")}>
                         <img style={"filter:hue-rotate(#{get_avatar_hue(@slide, "image-#{i}")}deg) brightness(1.5)"}
-                             src="/uploads/3d52f5cc-e171-4f8d-9e0b-b5d901e9e9cb.png" draggable="false">
+                             src="/uploads/8ebf6bb7-a9f3-4747-9779-5cfef787b514.png" draggable="false">
                         <span class="absolute bottom-[9%] left-[26%] -translate-x-1/2 rotate-14 text-black kai"
                               style={get_avatar_name_style(Map.get(@slide.transforms || %{}, "", @auto_transforms), "image-#{i}") <> ";text-shadow: 0 0 4px white"}>
                             <%= String.replace_prefix(image, "avatar-", "") %>
