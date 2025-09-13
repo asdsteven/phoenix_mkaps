@@ -9,6 +9,7 @@ Hooks.Touchable = {
     const touches = []
     let touchended = 0
     let cachedEls = new Set()
+    let moved = false
 
     if (el.matches('.mkaps-sentence')) {
       sentenceOrigins.set(el, {
@@ -59,13 +60,13 @@ Hooks.Touchable = {
 
       // so that tap highlight would not reset xyz
       if (el.matches('.mkaps-drag')) {
-        this.pushEvent("drag", {
+        this.pushEvent("drag", [{
           item: el.id,
           x: parseInt(el.style.left, 10),
           y: parseInt(el.style.top, 10),
           z: parseInt(el.style.zIndex, 10),
           size: getSize(el)
-        })
+        }])
       }
     }
 
@@ -125,6 +126,7 @@ Hooks.Touchable = {
 
     const touchMoved = () => {
       const mainTouches = touches.filter(t => t.isMain)
+      moved = true
       if (mainTouches.length == 1) {
         if (document.getElementById('background')?.dataset.togglePan === undefined) return
         const t = mainTouches[0]
@@ -191,7 +193,7 @@ Hooks.Touchable = {
       return true
     }
 
-    const inset = (el) => {
+    const inset = (el, m) => {
       let z = parseInt(el.style.zIndex, 10)
       const rect = el.getBoundingClientRect()
       for (const e of document.querySelectorAll('.mkaps-touch-drag')) {
@@ -206,7 +208,7 @@ Hooks.Touchable = {
         if (e === el) continue
         if (parseInt(e.style.zIndex, 10) >= z && parseInt(e.style.zIndex, 10) < 9999) {
           e.style.zIndex = parseInt(e.style.zIndex, 10) + 1
-          this.pushEvent("drag", {
+          m.set(e, {
             item: e.id,
             x: parseInt(e.style.left, 10),
             y: parseInt(e.style.top, 10),
@@ -216,7 +218,7 @@ Hooks.Touchable = {
         }
       }
       if (parseInt(el.style.zIndex, 10) < 9999) el.style.zIndex = z
-      this.pushEvent("drag", {
+      m.set(el, {
         item: el.id,
         x: parseInt(el.style.left, 10),
         y: parseInt(el.style.top, 10),
@@ -228,6 +230,7 @@ Hooks.Touchable = {
     const touchEnded = () => {
       const mainTouches = touches.filter(t => t.isMain)
       if (mainTouches.length == 2) return
+      if (!moved) return
       const rect = el.getBoundingClientRect()
       for (const t of touches) {
         if (t.isMain) continue
@@ -238,7 +241,9 @@ Hooks.Touchable = {
         if (mainTouches.length == 2) break
       }
       if (mainTouches.length == 0) {
-        if (el.matches('.mkaps-touch-drag')) inset(el)
+        moved = false
+        const m = new Map()
+        if (el.matches('.mkaps-touch-drag')) inset(el, m)
         if (el.id == 'background') {
           Array.from(sentenceOrigins.keys()).forEach(e => {
             if (!cachedEls.has(e)) return
@@ -247,7 +252,7 @@ Hooks.Touchable = {
               y: parseInt(e.style.top, 10),
               fontSize: parseInt(e.style.fontSize, 10)
             })
-            inset(e)
+            inset(e, m)
           })
           Array.from(imageOrigins.keys()).forEach(e => {
             if (!cachedEls.has(e)) return
@@ -256,9 +261,10 @@ Hooks.Touchable = {
               y: parseInt(e.style.top, 10),
               width: parseInt(e.style.width, 10)
             })
-            inset(e)
+            inset(e, m)
           })
         }
+        this.pushEvent('drag', Array.from(m.values()))
       }
     }
 
@@ -293,7 +299,7 @@ Hooks.Touchable = {
       if (touchMove('mouse', e)) touchMoved()
     })
     window.addEventListener("touchmove", (e) => {
-      if (document.getElementById('background')?.dataset.toggleScroll === undefined) e.preventDefault()
+      if (document.getElementById('background') && document.getElementById('background').dataset.toggleScroll === undefined) e.preventDefault()
       let mainMoved = false
       for (const touch of e.changedTouches) {
         if (!touchMove(touch.identifier, touch)) continue
