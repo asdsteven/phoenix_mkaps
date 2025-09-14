@@ -94,6 +94,20 @@ const persistent = (el) => {
   return events
 }
 
+const commitDraggings = () => {
+  const events = []
+  for (const e of draggings) {
+    events.push({
+      item: e.id,
+      x: parseInt(e.style.left, 10),
+      y: parseInt(e.style.top, 10),
+      z: parseInt(e.style.zIndex, 10),
+      size: getSize(e)
+    })
+  }
+  return events
+}
+
 Hooks.Touchable = {
   mounted() {
     const el = this.el
@@ -152,11 +166,12 @@ Hooks.Touchable = {
         // be State 1
         pointers.splice(i, 1)
         if (el.matches('.mkaps-grapheme')) {
+          this.pushEvent('drags', commitDraggings())
           this.pushEvent("toggle-highlight", {
             key: el.id
           })
-        }
-        if (el.matches('.mkaps-image')) {
+        } else if (el.matches('.mkaps-image')) {
+          this.pushEvent('drags', commitDraggings())
           this.pushEvent('flip', {
             image: el.id
           })
