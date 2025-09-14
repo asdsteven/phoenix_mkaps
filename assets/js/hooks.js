@@ -266,6 +266,7 @@ Hooks.Touchable = {
       }
       const i = pointers.findIndex(p => p.pointerId == e.pointerId)
       if (i == -1) return
+
       const p = pointers[i]
       p.x = e.x
       p.y = e.y
@@ -302,9 +303,9 @@ Hooks.Touchable = {
       }
       if (!document.querySelector('#board.mkaps-toggle-pan')) return
       if (el.id != 'board' && !el.matches('.mkaps-drag')) return
-      if (el.id == 'board' &&
-          !document.querySelector('#board.mkaps-toggle-sentences') &&
-          !document.querySelector('#board.mkaps-toggle-images')) return
+      if ((el.id == 'board') !=
+          (document.querySelector('#board.mkaps-toggle-sentences') != null ||
+           document.querySelector('#board.mkaps-toggle-images') != null)) return
       if (pointers.length == 1) {
         singleTouch()
       } else {

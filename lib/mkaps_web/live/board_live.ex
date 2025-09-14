@@ -170,7 +170,7 @@ defmodule MkapsWeb.BoardLive do
     ~H"""
     <span class={["absolute w-max max-w-[1080px] px-[0.4em] py-[0.1em]",
       "rounded-lg bg-stone-100 shadow-sm/100 text-black leading-[1.1] kai",
-      "cursor-grab mkaps-sentence mkaps-drag"]}
+      "mkaps-sentence mkaps-drag"]}
       :for={{sentence, i} <- Enum.with_index(String.split(@sentences, "\n"))}
       :if={sentence != ""}
       phx-hook="Touchable" id={"sentence-#{i}"}
@@ -195,7 +195,7 @@ defmodule MkapsWeb.BoardLive do
   attr :image_frames, :map, required: true
   defp show_images(assigns) do
     ~H"""
-    <img class="absolute h-auto shadow-sm/100 rounded-lg cursor-grab mkaps-image mkaps-drag"
+    <img class="absolute h-auto shadow-sm/100 rounded-lg mkaps-image mkaps-drag"
       draggable="false"
       :for={{image, i} <- Enum.with_index(String.split(@images, "\n"))}
       :if={image != ""}
@@ -309,7 +309,7 @@ defmodule MkapsWeb.BoardLive do
       @toggle_pan && "mkaps-toggle-pan",
       @toggle_zoom && "mkaps-toggle-zoom",
       @toggle_rotate && "mkaps-toggle-rotate",
-      (@toggle_sentences || @toggle_images) && "cursor-grab"]}
+      not @toggle_scroll && "touch-none"]}
       phx-hook="Touchable" id="board">
       <div class="w-full h-full bg-zinc-800/90"></div>
       <.show_sentences :if={@slide && @slide.sentences} sentences={@slide.sentences}
