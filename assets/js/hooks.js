@@ -113,6 +113,12 @@ Hooks.Touchable = {
     const el = this.el
     let myTicker = 1
 
+    if (el.matches('img')) {
+      el.addEventListener('contextmenu', (e) => {
+        e.preventDefault()
+      })
+    }
+
     // State 1: no touch:     pointers.length >= 0, all pointers are not moved
     // State 2: single touch: pointers.length == 1, pointers[0] is moved
     // State 3: multi touch:  pointers.length == 2, both pointers are moved
@@ -344,13 +350,13 @@ Hooks.CopyOnClick = {
 
 Hooks.FullScreen = {
   mounted() {
-    this.el.addEventListener("click", () => {
+    this.el.addEventListener('click', () => {
       if (document.fullscreenElement) {
-        document.exitFullscreen?.();
+        document.exitFullscreen?.()
       } else {
-        document.documentElement.requestFullscreen?.();
+        document.documentElement.requestFullscreen?.()
       }
-    });
+    })
   }
 }
 
