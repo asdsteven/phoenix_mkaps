@@ -271,11 +271,19 @@ Hooks.Touchable = {
       const q = pointers[1]
       if (el.id == 'board') {
       } else {
-        const len0 = Math.sqrt(Math.pow(t0.origin.x - t1.origin.x, 2) + Math.pow(t0.origin.y - t1.origin.y, 2))
-        const len1 = Math.sqrt(Math.pow(t0.x - t1.x, 2) + Math.pow(t0.y - t1.y, 2))
-        el.style.left = `${t0.x - Math.round((t0.origin.x - t0.elOrigin.x) * len1 / len0)}px`
-        el.style.top = `${t0.y - Math.round((t0.origin.y - t0.elOrigin.y) * len1 / len0)}px`
-        el.style.fontSize = `${Math.max(16, Math.min(100, Math.round(t0.elOrigin.fontSize * len1 / len0)))}px`
+        const len0 = Math.sqrt(Math.pow(p.originX - q.originX, 2) + Math.pow(p.originY - q.originY, 2))
+        const len1 = Math.sqrt(Math.pow(p.x - q.x, 2) + Math.pow(p.y - q.y, 2))
+        if (el.matches('.mkaps-sentence')) {
+          const r = Math.max(30 / p.elSize, Math.min(200 / p.elSize, len1 / len0))
+          el.style.left = `${p.x - Math.round((p.originX - p.elX) * r)}px`
+          el.style.top = `${p.y - Math.round((p.originY - p.elY) * r)}px`
+          el.style.fontSize = `${Math.round(p.elSize * r)}px`
+        } else if (el.matches('.mkaps-image')) {
+          const r = Math.max(100 / p.elSize, Math.min(1080 / p.elSize, len1 / len0))
+          el.style.left = `${p.x - Math.round((p.originX - p.elX) * r)}px`
+          el.style.top = `${p.y - Math.round((p.originY - p.elY) * r)}px`
+          el.style.width = `${Math.round(p.elSize * r)}px`
+        }
       }
     }
 
