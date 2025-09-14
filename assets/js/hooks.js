@@ -1,166 +1,156 @@
 const Hooks = {}
 
-const sentenceOrigins = new Map()
-const imageOrigins = new Map()
+const draggings = new Set()
+let ticker = 1
+let boardDragging = false
+
+const getSize = (el) => {
+  if (el.matches('.mkaps-sentence')) return parseInt(el.style.fontSize, 10)
+  if (el.matches('.mkaps-image')) return parseInt(el.style.width, 10)
+}
+
+const sink = (el) => {
+  let z = parseInt(el.style.zIndex, 10)
+  if (z == 9999) return
+  const rect = el.getBoundingClientRect()
+  for (const e of document.querySelectorAll('.mkaps-drag')) {
+    if (e === el) continue
+    const r = e.getBoundingClientRect()
+    if (rect.width < r.width || rect.height < r.height) continue
+    if (rect.right < r.left + r.width / 2 || rect.left > r.left + r.width / 2) continue
+    if (rect.bottom < r.top + r.height / 2 || rect.top > r.top + r.height / 2) continue
+    z = Math.min(z, parseInt(e.style.zIndex, 10))
+  }
+  el.style.zIndex = z
+
+  const events = []
+  events.push({
+    item: el.id,
+    x: parseInt(el.style.left, 10),
+    y: parseInt(el.style.top, 10),
+    z: parseInt(el.style.zIndex, 10),
+    size: getSize(el)
+  })
+
+  for (const e of document.querySelectorAll('.mkaps-drag')) {
+    if (e === el) continue
+    if (parseInt(e.style.zIndex, 10) == 9999) continue
+    if (parseInt(e.style.zIndex, 10) < z) continue
+    e.style.zIndex = parseInt(e.style.zIndex, 10) + 1
+    events.push({
+      item: e.id,
+      x: parseInt(e.style.left, 10),
+      y: parseInt(e.style.top, 10),
+      z: parseInt(e.style.zIndex, 10),
+      size: getSize(e)
+    })
+  }
+  return events
+}
+
+const setAllOrigins = (origins) => {
+  for (const e of document.querySelectorAll('.mkaps-sentence')) {
+    origins.set(e, {
+      x: parseInt(e.style.left, 10),
+      y: parseInt(e.style.top, 10),
+      z: parseInt(e.style.zIndex, 10),
+      size: getSize(e)
+    })
+  }
+  for (const e of document.querySelectorAll('.mkaps-image')) {
+    origins.set(e, {
+      x: parseInt(e.style.left, 10),
+      y: parseInt(e.style.top, 10),
+      z: parseInt(e.style.zIndex, 10),
+      size: getSize(e)
+    })
+  }
+}
+
+const persistent = (el) => {
+  const events = []
+  if (el.matches('.mkaps-toggle-sentences')) {
+    for (const e of document.querySelectorAll('.mkaps-sentence')) {
+      events.push({
+        item: e.id,
+        x: parseInt(e.style.left, 10),
+        y: parseInt(e.style.top, 10),
+        z: parseInt(e.style.zIndex, 10),
+        size: getSize(e)
+      })
+    }
+  }
+  if (el.matches('.mkaps-toggle-images')) {
+    for (const e of document.querySelectorAll('.mkaps-image')) {
+      events.push({
+        item: e.id,
+        x: parseInt(e.style.left, 10),
+        y: parseInt(e.style.top, 10),
+        z: parseInt(e.style.zIndex, 10),
+        size: getSize(e)
+      })
+    }
+  }
+  return events
+}
 
 Hooks.Touchable = {
   mounted() {
     const el = this.el
-    const touches = []
-    let touchended = 0
-    let cachedEls = new Set()
-    let moved = false
+    let myTicker = 1
 
-    if (el.matches('.mkaps-sentence')) {
-      sentenceOrigins.set(el, {
-        x: parseInt(el.style.left, 10),
-        y: parseInt(el.style.top, 10),
-        fontSize: parseInt(el.style.fontSize, 10)
-      })
-    }
-    if (el.matches('.mkaps-image')) {
-      imageOrigins.set(el, {
-        x: parseInt(el.style.left, 10),
-        y: parseInt(el.style.top, 10),
-        width: parseInt(el.style.width, 10)
-      })
-    }
+    // State 1: no touch:     pointers.length >= 0, all pointers are not moved
+    // State 2: single touch: pointers.length == 1, pointers[0] is moved
+    // State 3: multi touch:  pointers.length == 2, both pointers are moved
+    const pointers = []
 
-    const getSize = (el) => {
-      if (el.matches('.mkaps-sentence')) return parseInt(el.style.fontSize, 10)
-      if (el.matches('.mkaps-image')) return parseInt(el.style.width, 10)
-    }
-
-    const touchStart = (identifier, point) => {
-      if (el.id == 'background') {
-        cachedEls = new Set(sentenceOrigins.keys()).union(new Set(imageOrigins.keys()))
-      } else if (el.matches('.mkaps-sentence')) {
-        sentenceOrigins.delete(el)
-      } else if (el.matches('.mkaps-image')) {
-        imageOrigins.delete(el)
+    el.addEventListener('pointerdown', (e) => {
+      // invalidate pointers
+      if (myTicker != ticker) {
+        myTicker = ticker
+        pointers.splice(0)
       }
-      touches.push({
-        isMain: touches.length < 2,
-        moved: false,
-        identifier: identifier,
-        origin: {
-          x: point.clientX,
-          y: point.clientY
-        },
-        elOrigin: {
-          x: parseInt(el.style.left, 10),
-          y: parseInt(el.style.top, 10),
-          fontSize: parseInt(el.style.fontSize, 10),
-          width: parseInt(el.style.width, 10)
-        },
-        x: point.clientX,
-        y: point.clientY
-      })
-      el.style.cursor = "grabbing"
-
-      // so that tap highlight would not reset xyz
-      if (el.matches('.mkaps-drag')) {
-        this.pushEvent("drag", [{
-          item: el.id,
-          x: parseInt(el.style.left, 10),
-          y: parseInt(el.style.top, 10),
-          z: parseInt(el.style.zIndex, 10),
-          size: getSize(el)
-        }])
+      if ((el.id == 'board') !=
+          (document.querySelector('#board.mkaps-toggle-sentences') != null ||
+           document.querySelector('#board.mkaps-toggle-images') != null)) return
+      if (pointers.length == 0 || !pointers[0].moved) {
+        // is State 1
+        // be State 1
+        pointers.push({
+          ticker: ticker,
+          pointerId: e.pointerId,
+          originX: e.x,
+          originY: e.y,
+          moved: false
+        })
+      } else if (pointers.length == 1 && pointers[0].moved) {
+        if (!document.querySelector('#board.mkaps-toggle-zoom') &&
+            !document.querySelector('#board.mkaps-toggle-rotate')) return
+        if (el.id != 'board' && !el.matches('.mkaps-drag')) return
+        // is State 2
+        // be State 3
+        pointers.push({
+          ticker: ticker,
+          pointerId: e.pointerId,
+          originX: e.x,
+          originY: e.y,
+          moved: true
+        })
       }
-    }
+    })
 
-    const touchMove = (identifier, point) => {
-      const t = touches.find(t => t.identifier == identifier)
-      if (!t) return false
-      t.x = point.clientX
-      t.y = point.clientY
-      const moved = t.moved
-      t.moved ||= Math.abs(t.x - t.origin.x) >= 10
-      t.moved ||= Math.abs(t.y - t.origin.y) >= 10
-      if (!moved && t.moved && el.matches('.mkaps-touch-drag') && parseInt(el.style.zIndex, 10) < 9999) {
-        // quite unpredictable, but efficient
-        const allZ = Array.from(document.querySelectorAll('.mkaps-touch-drag'))
-                          .filter(e => e !== el && parseInt(e.style.zIndex, 10) < 9999).map(e => parseInt(e.style.zIndex, 10))
-        el.style.zIndex = Math.max(0, ...allZ) + 1
+    const pointerend = (e) => {
+      // invalidate pointers
+      if (myTicker != ticker) {
+        myTicker = ticker
+        pointers.splice(0)
       }
-      return t.moved && t.isMain
-    }
-
-    const pinchSentence = (t0, t1) => {
-      const len0 = Math.sqrt(Math.pow(t0.origin.x - t1.origin.x, 2) + Math.pow(t0.origin.y - t1.origin.y, 2))
-      const len1 = Math.sqrt(Math.pow(t0.x - t1.x, 2) + Math.pow(t0.y - t1.y, 2))
-      el.style.left = `${t0.x - Math.round((t0.origin.x - t0.elOrigin.x) * len1 / len0)}px`
-      el.style.top = `${t0.y - Math.round((t0.origin.y - t0.elOrigin.y) * len1 / len0)}px`
-      el.style.fontSize = `${Math.max(16, Math.min(100, Math.round(t0.elOrigin.fontSize * len1 / len0)))}px`
-    }
-
-    const pinchImage = (t0, t1) => {
-      const len0 = Math.sqrt(Math.pow(t0.origin.x - t1.origin.x, 2) + Math.pow(t0.origin.y - t1.origin.y, 2))
-      const len1 = Math.sqrt(Math.pow(t0.x - t1.x, 2) + Math.pow(t0.y - t1.y, 2))
-      el.style.left = `${t0.x - Math.round((t0.origin.x - t0.elOrigin.x) * len1 / len0)}px`
-      el.style.top = `${t0.y - Math.round((t0.origin.y - t0.elOrigin.y) * len1 / len0)}px`
-      el.style.width = `${Math.max(100, Math.min(1280, Math.round(t0.elOrigin.width * len1 / len0)))}px`
-    }
-
-    const pinchBackground = (t0, t1) => {
-      const len0 = Math.sqrt(Math.pow(t0.origin.x - t1.origin.x, 2) + Math.pow(t0.origin.y - t1.origin.y, 2))
-      const len1 = Math.sqrt(Math.pow(t0.x - t1.x, 2) + Math.pow(t0.y - t1.y, 2))
-      if (el.dataset.toggleSentences !== undefined) {
-        for (const [e, {x, y, fontSize}] of sentenceOrigins) {
-          if (!cachedEls.has(e)) continue
-          e.style.left = `${t0.x - Math.round((t0.origin.x - x) * len1 / len0)}px`
-          e.style.top = `${t0.y - Math.round((t0.origin.y - y) * len1 / len0)}px`
-          e.style.fontSize = `${Math.max(16, Math.min(100, Math.round(fontSize * len1 / len0)))}px`
-        }
-      }
-      if (el.dataset.toggleImages !== undefined) {
-        for (const [e, {x, y, width}] of imageOrigins) {
-          if (!cachedEls.has(e)) continue
-          e.style.left = `${t0.x - Math.round((t0.origin.x - x) * len1 / len0)}px`
-          e.style.top = `${t0.y - Math.round((t0.origin.y - y) * len1 / len0)}px`
-          e.style.width = `${Math.max(100, Math.min(1280, Math.round(width * len1 / len0)))}px`
-        }
-      }
-    }
-
-    const touchMoved = () => {
-      const mainTouches = touches.filter(t => t.isMain)
-      moved = true
-      if (mainTouches.length == 1) {
-        if (document.getElementById('background')?.dataset.togglePan === undefined) return
-        const t = mainTouches[0]
-        if (el.matches('.mkaps-touch-drag')) {
-          el.style.left = `${t.elOrigin.x + t.x - t.origin.x}px`
-          el.style.top = `${t.elOrigin.y + t.y - t.origin.y}px`
-        } else if (el.id == 'background') {
-          if (el.dataset.toggleSentences !== undefined) {
-            for (const [e, {x, y}] of sentenceOrigins) {
-              if (!cachedEls.has(e)) continue
-              e.style.left = `${x + t.x - t.origin.x}px`
-              e.style.top = `${y + t.y - t.origin.y}px`
-            }
-          }
-          if (el.dataset.toggleImages !== undefined) {
-            for (const [e, {x, y}] of imageOrigins) {
-              if (!cachedEls.has(e)) continue
-              e.style.left = `${x + t.x - t.origin.x}px`
-              e.style.top = `${y + t.y - t.origin.y}px`
-            }
-          }
-        }
-      } else {
-        if (document.getElementById('background')?.dataset.toggleZoom === undefined) return
-        if (el.matches('.mkaps-sentence')) pinchSentence(mainTouches[0], mainTouches[1])
-        if (el.matches('.mkaps-image')) pinchImage(mainTouches[0], mainTouches[1])
-        if (el.id == 'background') pinchBackground(mainTouches[0], mainTouches[1])
-      }
-    }
-
-    const touchEnd = (identifier) => {
-      const i = touches.findIndex(t => t.identifier == identifier)
-      if (i == -1) return false
-      if (el.matches('.mkaps-touch-tap') && !touches[i].moved) {
+      const i = pointers.findIndex(p => p.pointerId == e.pointerId)
+      if (i == -1) return
+      if (!pointers[0].moved) {
+        // is State 1
+        // be State 1
+        pointers.splice(i, 1)
         if (el.matches('.mkaps-grapheme')) {
           this.pushEvent("toggle-highlight", {
             key: el.id
@@ -168,158 +158,158 @@ Hooks.Touchable = {
         }
         if (el.matches('.mkaps-image')) {
           this.pushEvent('flip', {
-            item: el.id
+            image: el.id
           })
         }
-      }
-      touches.splice(i, 1)
-      if (touches.length == 0) {
-        el.style.cursor = "grab"
-        if (el.matches('.mkaps-sentence')) {
-          sentenceOrigins.set(el, {
+      } else if (pointers.length == 1) {
+        // is State 2
+        // be State 1
+        pointers.splice(i, 1)
+        if (el.id == 'board') {
+          this.pushEvent('drags', persistent(el))
+          boardDragging = false
+        } else if (draggings.has(el)) {
+          draggings.delete(el)
+          this.pushEvent('drags', sink(el))
+        }
+      } else  {
+        // is State 3
+        if (el.id == 'board') {
+          pointers.splice(i, 1)
+          pointers[0].originX = pointers[0].x
+          pointers[0].originY = pointers[0].y
+          pointers[0].origins.clear()
+          setAllOrigins(pointers[0].origins)
+          this.pushEvent('drags', persistent(el))
+        } else {
+          pointers.splice(i, 1)
+          pointers[0].originX = pointers[0].x
+          pointers[0].originY = pointers[0].y
+          pointers[0].elX = parseInt(el.style.left, 10)
+          pointers[0].elY = parseInt(el.style.top, 10)
+          pointers[0].elZ = parseInt(el.style.zIndex, 10)
+          pointers[0].elSize = getSize(el)
+          this.pushEvent('drags', [{
+            item: el.id,
             x: parseInt(el.style.left, 10),
             y: parseInt(el.style.top, 10),
-            fontSize: parseInt(el.style.fontSize, 10)
-          })
-        }
-        if (el.matches('.mkaps-image')) {
-          imageOrigins.set(el, {
-            x: parseInt(el.style.left, 10),
-            y: parseInt(el.style.top, 10),
-            width: parseInt(el.style.width, 10)
-          })
+            z: parseInt(el.style.zIndex, 10),
+            size: getSize(el)
+          }])
         }
       }
-      return true
     }
+    window.addEventListener('pointerup', pointerend)
+    window.addEventListener('pointercancel', pointerend)
 
-    const inset = (el, m) => {
-      let z = parseInt(el.style.zIndex, 10)
-      const rect = el.getBoundingClientRect()
-      for (const e of document.querySelectorAll('.mkaps-touch-drag')) {
-        if (e === el) continue
-        const r = e.getBoundingClientRect()
-        if (rect.width < r.width / 2 || rect.height < r.height / 2) continue
-        if (rect.right < r.left + r.width / 2 || rect.left > r.left + r.width / 2) continue
-        if (rect.bottom < r.top + r.height / 2 || rect.top > r.top + r.height / 2) continue
-        z = Math.min(z, parseInt(e.style.zIndex, 10))
-      }
-      for (const e of document.querySelectorAll('.mkaps-touch-drag')) {
-        if (e === el) continue
-        if (parseInt(e.style.zIndex, 10) >= z && parseInt(e.style.zIndex, 10) < 9999) {
-          e.style.zIndex = parseInt(e.style.zIndex, 10) + 1
-          m.set(e, {
-            item: e.id,
-            x: parseInt(e.style.left, 10),
-            y: parseInt(e.style.top, 10),
-            z: parseInt(e.style.zIndex, 10),
-            size: getSize(e)
-          })
+    const singleTouch = () => {
+      // is State 2
+      const p = pointers[0]
+      if (el.id == 'board') {
+        boardDragging = true
+        if (draggings.size > 0) {
+          // invalidate all other pointers
+          myTicker = ++ticker
+
+          // persistent draggings
+          const events = []
+          for (const el of draggings) {
+            events.push(...sink(el))
+          }
+          draggings.clear()
+          this.pushEvent('drags', events)
+        }
+        if (el.matches('.mkaps-toggle-sentences')) {
+          for (const el of document.querySelectorAll('.mkaps-sentence')) {
+            el.style.left = `${p.x - (p.originX - p.origins.get(el).x)}px`
+            el.style.top = `${p.y - (p.originY - p.origins.get(el).y)}px`
+          }
+        }
+        if (el.matches('.mkaps-toggle-images')) {
+          for (const el of document.querySelectorAll('.mkaps-image')) {
+            el.style.left = `${p.x - (p.originX - p.origins.get(el).x)}px`
+            el.style.top = `${p.y - (p.originY - p.origins.get(el).y)}px`
+          }
+        }
+      } else {
+        el.style.left = `${p.x - (p.originX - p.elX)}px`
+        el.style.top = `${p.y - (p.originY - p.elY)}px`
+        if (!draggings.has(el)) {
+          draggings.add(el)
+          const allZ = Array.from(document.querySelectorAll('.mkaps-drag'))
+                            .filter(e => e !== el && parseInt(e.style.zIndex, 10) < 9999)
+                            .map(e => parseInt(e.style.zIndex, 10))
+          el.style.zIndex = Math.max(0, ...allZ) + 1
         }
       }
-      if (parseInt(el.style.zIndex, 10) < 9999) el.style.zIndex = z
-      m.set(el, {
-        item: el.id,
-        x: parseInt(el.style.left, 10),
-        y: parseInt(el.style.top, 10),
-        z: parseInt(el.style.zIndex, 10),
-        size: getSize(el)
-      })
     }
 
-    const touchEnded = () => {
-      const mainTouches = touches.filter(t => t.isMain)
-      if (mainTouches.length == 2) return
-      if (!moved) return
-      const rect = el.getBoundingClientRect()
-      for (const t of touches) {
-        if (t.isMain) continue
-        if (!(rect.left <= t.x && t.x < rect.right)) continue
-        if (!(rect.top <= t.y && t.y < rect.bottom)) continue
-        t.isMain = true
-        mainTouches.push(t)
-        if (mainTouches.length == 2) break
+    const multiTouch = () => {
+      // is State 3
+      const p = pointers[0]
+      const q = pointers[1]
+      if (el.id == 'board') {
+      } else {
+        const len0 = Math.sqrt(Math.pow(t0.origin.x - t1.origin.x, 2) + Math.pow(t0.origin.y - t1.origin.y, 2))
+        const len1 = Math.sqrt(Math.pow(t0.x - t1.x, 2) + Math.pow(t0.y - t1.y, 2))
+        el.style.left = `${t0.x - Math.round((t0.origin.x - t0.elOrigin.x) * len1 / len0)}px`
+        el.style.top = `${t0.y - Math.round((t0.origin.y - t0.elOrigin.y) * len1 / len0)}px`
+        el.style.fontSize = `${Math.max(16, Math.min(100, Math.round(t0.elOrigin.fontSize * len1 / len0)))}px`
       }
-      if (mainTouches.length == 0) {
-        moved = false
-        const m = new Map()
-        if (el.matches('.mkaps-touch-drag')) inset(el, m)
-        if (el.id == 'background') {
-          Array.from(sentenceOrigins.keys()).forEach(e => {
-            if (!cachedEls.has(e)) return
-            sentenceOrigins.set(e, {
-              x: parseInt(e.style.left, 10),
-              y: parseInt(e.style.top, 10),
-              fontSize: parseInt(e.style.fontSize, 10)
-            })
-            inset(e, m)
-          })
-          Array.from(imageOrigins.keys()).forEach(e => {
-            if (!cachedEls.has(e)) return
-            imageOrigins.set(e, {
-              x: parseInt(e.style.left, 10),
-              y: parseInt(e.style.top, 10),
-              width: parseInt(e.style.width, 10)
-            })
-            inset(e, m)
-          })
+    }
+
+    window.addEventListener('pointermove', (e) => {
+      // invalidate pointers
+      if (myTicker != ticker) {
+        myTicker = ticker
+        pointers.splice(0)
+      }
+      const i = pointers.findIndex(p => p.pointerId == e.pointerId)
+      if (i == -1) return
+      const p = pointers[i]
+      p.x = e.x
+      p.y = e.y
+      if (!pointers[0].moved) {
+        // is State 1
+        p.moved ||= Math.abs(e.x - p.originX) >= 10
+        p.moved ||= Math.abs(e.y - p.originY) >= 10
+        if (!p.moved) return
+        if (el.id == 'board') {
+          p.originX = p.x
+          p.originY = p.y
+          p.origins = new Map()
+          setAllOrigins(p.origins)
+        } else {
+          p.originX = p.x
+          p.originY = p.y
+          p.elX = parseInt(el.style.left, 10)
+          p.elY = parseInt(el.style.top, 10)
+          p.elZ = parseInt(el.style.zIndex, 10)
+          p.elSize = getSize(el)
         }
-        this.pushEvent('drag', Array.from(m.values()))
+        if (pointers.length == 1) return
+        if (document.querySelector('#board.mkaps-toggle-zoom') ||
+            document.querySelector('#board.mkaps-toggle-rotate')) {
+          // be State 3
+          pointers.splice(i, 1)
+          pointers.unshift(p)
+          pointers.splice(2)
+          pointers[1].moved = true
+        } else {
+          // be State 2
+          pointers.splice(1)
+        }
       }
-    }
-
-    const backgroundActive = () => el.dataset.toggleSentences !== undefined || el.dataset.toggleImages !== undefined
-    const backgroundActiveSentences = () => {
-      const el = document.getElementById('background')
-      return el?.dataset.toggleSentences !== undefined && el.dataset.toggleImages === undefined
-    }
-    const backgroundActiveImages = () => {
-      const el = document.getElementById('background')
-      return el?.dataset.toggleSentences === undefined && el.dataset.toggleImages !== undefined
-    }
-
-    el.addEventListener("mousedown", (e) => {
-      if (Date.now() - touchended < 1000) return
-      if (el.id == 'background' && !backgroundActive()) return
-      if (el.matches('.mkaps-image') && backgroundActiveSentences()) return
-      if (el.matches('.mkaps-sentence') && backgroundActiveImages()) return
-      touchStart('mouse', e)
-    })
-    el.addEventListener("touchstart", (e) => {
-      for (const touch of e.changedTouches) {
-        if (!el.contains(touch.target)) continue
-        if (el.id == 'background' && !backgroundActive()) continue
-        if (el.matches('.mkaps-image') && backgroundActiveSentences()) continue
-        if (el.matches('.mkaps-sentence') && backgroundActiveImages()) continue
-        touchStart(touch.identifier, touch)
+      if (!document.querySelector('#board.mkaps-toggle-pan')) return
+      if (el.id != 'board' && !el.matches('.mkaps-drag')) return
+      if (el.id == 'board' &&
+          !document.querySelector('#board.mkaps-toggle-sentences') &&
+          !document.querySelector('#board.mkaps-toggle-images')) return
+      if (pointers.length == 1) {
+        singleTouch()
+      } else {
+        multiTouch()
       }
-    }, { passive: false })
-
-    window.addEventListener("mousemove", (e) => {
-      if (touchMove('mouse', e)) touchMoved()
-    })
-    window.addEventListener("touchmove", (e) => {
-      if (document.getElementById('background') && document.getElementById('background').dataset.toggleScroll === undefined) e.preventDefault()
-      let mainMoved = false
-      for (const touch of e.changedTouches) {
-        if (!touchMove(touch.identifier, touch)) continue
-        e.preventDefault()
-        mainMoved = true
-      }
-      if (mainMoved) touchMoved()
-    }, { passive: false })
-
-    window.addEventListener("mouseup", (e) => {
-      if (touchEnd('mouse')) touchEnded()
-    })
-    window.addEventListener("touchend", (e) => {
-      let ended = false
-      for (const touch of e.changedTouches) {
-        if (!touchEnd(touch.identifier)) continue
-        ended = true
-        touchended = Date.now()
-      }
-      if (ended) touchEnded()
     })
   }
 }

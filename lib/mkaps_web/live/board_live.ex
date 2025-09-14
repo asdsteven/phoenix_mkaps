@@ -74,7 +74,9 @@ defmodule MkapsWeb.BoardLive do
       <div class="join">
         <input class={["join-item input", Map.has_key?(@form.source.changes, :name) && "input-primary"]}
           type="text" placeholder="Lesson name" name={@form[:name].name} value={@form[:name].value} />
-        <button class="join-item btn btn-primary" type="submit" disabled={@form.source.changes == %{}}>Submit</button>
+        <button class="join-item btn btn-primary" type="submit" disabled={@form.source.changes == %{}}>
+          {if @form[:id].value, do: "Save", else: "Create"}
+        </button>
       </div>
       <div :if={@form[:id].value} class="join">
         <button type="button" class="join-item btn btn-secondary" phx-click="move-lesson" phx-value-lesson={@form[:id].value}>Move Up</button>
@@ -110,7 +112,9 @@ defmodule MkapsWeb.BoardLive do
         name={@form[:sentences].name} placeholder="Sentences">{@form[:sentences].value}</textarea>
       <textarea class={["textarea", Map.has_key?(@form.source.changes, :images) && "textarea-primary"]}
         name={@form[:images].name} placeholder="Images">{@form[:images].value}</textarea>
-      <button class="btn btn-primary" type="submit" disabled={@form.source.changes == %{}}>Submit</button>
+      <button class="btn btn-primary" type="submit" disabled={@form.source.changes == %{}}>
+        {if @form[:id].value, do: "Save", else: "Create"}
+      </button>
       <div :if={@form[:id].value} class="join">
         <button class="join-item btn btn-secondary" type="button" phx-click="move-slide" phx-value-slide={@form[:id].value}>Move</button>
         <.link class="join-item btn btn-accent" patch={~p"/lessons/#{@form[:lesson_id].value}/slides/#{@form[:position].value}"}>Play</.link>
@@ -121,7 +125,7 @@ defmodule MkapsWeb.BoardLive do
           src={Enum.at(String.split(image, " "), 0)} />
       </div>
       <textarea class={["textarea", Map.has_key?(@form.source.changes, :transforms) && "textarea-primary"]}
-        name={@form[:transforms].name} placeholder="Transforms">{Jason.encode!(@form[:transforms].value)}</textarea>
+        name={@form[:transforms].name} placeholder="Transforms">{Jason.encode!(@form[:transforms].value || %{})}</textarea>
     </.form>
     """
   end
@@ -164,20 +168,21 @@ defmodule MkapsWeb.BoardLive do
   attr :highlights, :map, required: true
   defp show_sentences(assigns) do
     ~H"""
-    <span class={["absolute w-max max-w-[1200px] px-[0.4em] py-[0.1em]",
+    <span class={["absolute w-max max-w-[1080px] px-[0.4em] py-[0.1em]",
       "rounded-lg bg-stone-100 shadow-sm/100 text-black leading-[1.1] kai",
-      "cursor-grab mkaps-touch-drag mkaps-sentence"]}
+      "cursor-grab mkaps-sentence mkaps-drag"]}
       :for={{sentence, i} <- Enum.with_index(String.split(@sentences, "\n"))}
+      :if={sentence != ""}
       phx-hook="Touchable" id={"sentence-#{i}"}
       style={get_sentence_style(@transforms, @auto_transforms, "sentence-#{i}")}>
       <span :for={{{grapheme, deco}, j} <- Enum.with_index(graphemes(sentence))}
         phx-hook="Touchable" id={"#{@slide_id}-#{i}-#{j}"}
-        class={["inline-block mkaps-touch-tap mkaps-grapheme",
+        class={["inline-block mkaps-grapheme",
           "#{@slide_id}-#{i}-#{j}" in @highlights && "text-violet-900 bg-violet-200",
           "#{@slide_id}-#{i}-#{j-1}" not in @highlights && "rounded-l-md",
           "#{@slide_id}-#{i}-#{j+1}" not in @highlights && "rounded-r-md",
           deco == "underline" && "underline underline-offset-[0.15em]"]}>
-        {if grapheme == " ", do: "&nbsp;", else: grapheme}
+        {if grapheme == " ", do: raw("&nbsp;"), else: grapheme}
       </span>
     </span>
     """
@@ -190,9 +195,10 @@ defmodule MkapsWeb.BoardLive do
   attr :image_frames, :map, required: true
   defp show_images(assigns) do
     ~H"""
-    <img class="absolute h-auto shadow-sm/100 rounded-lg cursor-grab mkaps-touch-drag mkaps-touch-tap mkaps-image"
+    <img class="absolute h-auto shadow-sm/100 rounded-lg cursor-grab mkaps-image mkaps-drag"
       draggable="false"
       :for={{image, i} <- Enum.with_index(String.split(@images, "\n"))}
+      :if={image != ""}
       src={Enum.at(String.split(image, " "), Map.get(@image_frames, "#{@slide_id}-#{i}", 0))}
       phx-hook="Touchable" id={"image-#{i}"}
       style={get_image_style(@transforms, @auto_transforms, "image-#{i}")} />
@@ -216,22 +222,6 @@ defmodule MkapsWeb.BoardLive do
       <button class="join-item btn btn-sm kai btn-outline" phx-click="hue-left">&lt;</button>
       <button class="join-item btn btn-sm btn-outline" disabled>{@hue}</button>
       <button class="join-item btn btn-sm kai btn-outline" phx-click="hue-right">&gt;</button>
-    </div>
-    """
-  end
-
-  attr :toggle_scroll, :boolean, required: true
-  attr :toggle_sentences, :boolean, required: true
-  attr :toggle_images, :boolean, required: true
-  defp show_toggle_background_gestures(assigns) do
-    ~H"""
-    <div class="join tooltip tooltip-right" data-tip="輕觸背景滾動，或操控所有字/圖">
-      <button class={"join-item btn btn-sm kai #{if @toggle_scroll, do: "btn-primary", else: "btn-outline"}"}
-        phx-click="toggle-scroll">滾</button>
-      <button class={"join-item btn btn-sm kai #{if @toggle_sentences, do: "btn-primary", else: "btn-outline"}"}
-        phx-click="toggle-sentences">字</button>
-      <button class={"join-item btn btn-sm kai #{if @toggle_images, do: "btn-primary", else: "btn-outline"}"}
-        phx-click="toggle-images">圖</button>
     </div>
     """
   end
@@ -264,6 +254,22 @@ defmodule MkapsWeb.BoardLive do
     """
   end
 
+  attr :toggle_scroll, :boolean, required: true
+  attr :toggle_sentences, :boolean, required: true
+  attr :toggle_images, :boolean, required: true
+  defp show_toggle_background_gestures(assigns) do
+    ~H"""
+    <div class="join tooltip tooltip-right" data-tip="輕觸背景滾動，或操控所有字/圖">
+      <button class={"join-item btn btn-sm kai #{if @toggle_scroll, do: "btn-primary", else: "btn-outline"}"}
+        phx-click="toggle-scroll">滾</button>
+      <button class={"join-item btn btn-sm kai #{if @toggle_sentences, do: "btn-primary", else: "btn-outline"}"}
+        phx-click="toggle-sentences">字</button>
+      <button class={"join-item btn btn-sm kai #{if @toggle_images, do: "btn-primary", else: "btn-outline"}"}
+        phx-click="toggle-images">圖</button>
+    </div>
+    """
+  end
+
   attr :toggle_pan, :boolean, required: true
   attr :toggle_zoom, :boolean, required: true
   attr :toggle_rotate, :boolean, required: true
@@ -290,40 +296,44 @@ defmodule MkapsWeb.BoardLive do
   attr :toggle_zoom, :boolean, required: true
   attr :toggle_rotate, :boolean, required: true
   attr :lesson, Lesson, required: true
-  attr :slide, Slide, required: true
+  attr :slide, Slide, default: nil
   attr :slide_position, :integer, required: true
   attr :auto_transforms, :map, required: true
   attr :focus_id, :string, required: true
   defp show_slide(assigns) do
     ~H"""
     <div class={["w-[1280px] h-[720px] bg-[url(/images/background1.jpg)] bg-cover bg-center relative overflow-hidden select-none",
+      @toggle_scroll && "mkaps-toggle-scroll",
+      @toggle_sentences && "mkaps-toggle-sentences",
+      @toggle_images && "mkaps-toggle-images",
+      @toggle_pan && "mkaps-toggle-pan",
+      @toggle_zoom && "mkaps-toggle-zoom",
+      @toggle_rotate && "mkaps-toggle-rotate",
       (@toggle_sentences || @toggle_images) && "cursor-grab"]}
-      phx-hook="Touchable" id="background"
-      data-toggle-scroll={@toggle_scroll} data-toggle-sentences={@toggle_sentences} data-toggle-images={@toggle_images}
-      data-toggle-pan={@toggle_pan} data-toggle-zoom={@toggle_zoom} data-toggle-rotate={@toggle_rotate}>
-      <div class="absolute inset-0 bg-zinc-800/90"></div>
+      phx-hook="Touchable" id="board">
+      <div class="w-full h-full bg-zinc-800/90"></div>
       <.show_sentences :if={@slide && @slide.sentences} sentences={@slide.sentences}
         transforms={Map.get(@slide.transforms || %{}, "", %{})} auto_transforms={@auto_transforms}
         slide_id={@slide.id} highlights={@highlights} />
       <.show_images :if={@slide && @slide.images} images={@slide.images}
         transforms={Map.get(@slide.transforms || %{}, "", %{})} auto_transforms={@auto_transforms}
         slide_id={@slide.id} image_frames={@image_frames} />
-      <div class="fixed z-9999 bottom-0 left-1/2 transform -translate-x-1/2 join">
-        <.link :for={slide <- @lesson.slides}
-          class={["join-item btn btn-xs btn-outline", slide.position == @slide_position && "btn-primary"]}
-          patch={~p"/lessons/#{@lesson.id}/slides/#{slide.position}"}>{slide.position}</.link>
-      </div>
-      <div class="fixed z-9999 bottom-0 right-0">
-        <.link class="btn btn-circle btn-outline" patch={~p"/lessons/#{@lesson.id}/slides/#{@slide_position-1}"}>&lt;</.link>
-        <.link class="btn btn-circle btn-outline" patch={~p"/lessons/#{@lesson.id}/slides/#{@slide_position+1}"}>&gt;</.link>
-      </div>
-      <div class="fixed z-9999 bottom-0 left-0 flex flex-col">
-        <.show_save_transforms :if={@slide && @slide.transforms} transforms_state={@transforms_state} transforms={@slide.transforms} />
-        <.show_toggle_background_gestures toggle_scroll={@toggle_scroll} toggle_sentences={@toggle_sentences} toggle_images={@toggle_images} />
-        <.show_toggle_gestures toggle_pan={@toggle_pan} toggle_zoom={@toggle_zoom} toggle_rotate={@toggle_rotate} />
-        <.link class="btn btn-sm btn-outline kai" patch={~p"/lessons/#{@lesson.id}/edit"}>編輯</.link>
-        <button class="btn btn-sm btn-outline kai" phx-hook="FullScreen" id="fullscreen">全屏</button>
-      </div>
+    </div>
+    <div class="fixed z-9999 bottom-0 left-1/2 transform -translate-x-1/2 join">
+      <.link :for={slide <- @lesson.slides}
+        class={["join-item btn btn-xs btn-outline", slide.position == @slide_position && "btn-primary"]}
+        patch={~p"/lessons/#{@lesson.id}/slides/#{slide.position}"}>{slide.position}</.link>
+    </div>
+    <div class="fixed z-9999 bottom-0 right-0">
+      <.link class="btn btn-circle btn-outline" patch={~p"/lessons/#{@lesson.id}/slides/#{@slide_position-1}"}>&lt;</.link>
+      <.link class="btn btn-circle btn-outline" patch={~p"/lessons/#{@lesson.id}/slides/#{@slide_position+1}"}>&gt;</.link>
+    </div>
+    <div class="fixed z-9999 bottom-0 left-0 flex flex-col">
+      <.show_save_transforms :if={@slide && @slide.transforms} transforms_state={@transforms_state} transforms={@slide.transforms} />
+      <.show_toggle_background_gestures toggle_scroll={@toggle_scroll} toggle_sentences={@toggle_sentences} toggle_images={@toggle_images} />
+      <.show_toggle_gestures toggle_pan={@toggle_pan} toggle_zoom={@toggle_zoom} toggle_rotate={@toggle_rotate} />
+      <.link class="btn btn-sm btn-outline kai" patch={~p"/lessons/#{@lesson.id}/edit"}>編輯</.link>
+      <button class="btn btn-sm btn-outline kai" phx-hook="FullScreen" id="fullscreen">全屏</button>
     </div>
     """
   end
@@ -376,7 +386,7 @@ defmodule MkapsWeb.BoardLive do
   def handle_event("submit-slide", %{"slide" => %{"id" => _} = params}, socket) do
     id = String.to_integer(params["id"])
     lesson_id = String.to_integer(params["lesson_id"])
-    slide = Slide |> Repo.get!(id) |> Slide.changeset(decode_transforms(params)) |> Repo.update!
+    Slide |> Repo.get!(id) |> Slide.changeset(decode_transforms(params)) |> Repo.update!
     {:noreply,
      socket
      |> assign(lesson: Lesson |> preload(:slides) |> Repo.get!(lesson_id))
@@ -424,27 +434,43 @@ defmodule MkapsWeb.BoardLive do
   end
 
   def handle_event("toggle-scroll", _params, socket) do
-    {:noreply, update(socket, :toggle_scroll, &(not &1))}
+    scroll = not socket.assigns.toggle_scroll
+    sentences = not scroll and socket.assigns.toggle_sentences
+    images = not scroll and socket.assigns.toggle_images
+    {:noreply, assign(socket, toggle_scroll: scroll, toggle_sentences: sentences, toggle_images: images)}
   end
 
   def handle_event("toggle-sentences", _params, socket) do
-    {:noreply, update(socket, :toggle_sentences, &(not &1))}
+    sentences = not socket.assigns.toggle_sentences
+    scroll = not sentences and socket.assigns.toggle_scroll
+    {:noreply, assign(socket, toggle_scroll: scroll, toggle_sentences: sentences)}
   end
 
   def handle_event("toggle-images", _params, socket) do
-    {:noreply, update(socket, :toggle_images, &(not &1))}
+    images = not socket.assigns.toggle_images
+    scroll = not images and socket.assigns.toggle_scroll
+    {:noreply, assign(socket, toggle_scroll: scroll, toggle_images: images)}
   end
 
   def handle_event("toggle-pan", _params, socket) do
-    {:noreply, update(socket, :toggle_pan, &(not &1))}
+    pan = not socket.assigns.toggle_pan
+    zoom = pan and socket.assigns.toggle_zoom
+    rotate = zoom and socket.assigns.toggle_rotate
+    {:noreply, assign(socket, toggle_pan: pan, toggle_zoom: zoom, toggle_rotate: rotate)}
   end
 
   def handle_event("toggle-zoom", _params, socket) do
-    {:noreply, update(socket, :toggle_zoom, &(not &1))}
+    zoom = not socket.assigns.toggle_zoom
+    pan = zoom or socket.assigns.toggle_pan
+    rotate = zoom and socket.assigns.toggle_rotate
+    {:noreply, assign(socket, toggle_pan: pan, toggle_zoom: zoom, toggle_rotate: rotate)}
   end
 
   def handle_event("toggle-rotate", _params, socket) do
-    {:noreply, update(socket, :toggle_rotate, &(not &1))}
+    rotate = not socket.assigns.toggle_rotate
+    zoom = rotate or socket.assigns.toggle_zoom
+    pan = rotate or socket.assigns.toggle_pan
+    {:noreply, assign(socket, toggle_pan: pan, toggle_zoom: zoom, toggle_rotate: rotate)}
   end
 
   def handle_event("save-transforms", %{"slot" => slot}, socket) do
@@ -473,7 +499,7 @@ defmodule MkapsWeb.BoardLive do
     slide = socket.assigns.slide |> Slide.changeset(%{transforms: transforms}) |> Repo.update!
     {:noreply,
      socket
-     |> assign(:lesson, &update_lesson_slide(&1, slide))
+     |> update(:lesson, &update_lesson_slide(&1, slide))
      |> assign(slide: slide)
      |> assign(transforms_state: :pending)}
   end
@@ -487,7 +513,7 @@ defmodule MkapsWeb.BoardLive do
     slide = socket.assigns.slide |> Slide.changeset(%{transforms: transforms}) |> Repo.update!
     {:noreply,
      socket
-     |> assign(:lesson, &update_lesson_slide(&1, slide))
+     |> update(:lesson, &update_lesson_slide(&1, slide))
      |> assign(slide: slide)}
   end
 
@@ -506,7 +532,7 @@ defmodule MkapsWeb.BoardLive do
      |> assign(focus_id: "image-" <> i)}
   end
 
-  def handle_event("drag", drags, socket) do
+  def handle_event("drags", drags, socket) do
     active_transforms = Map.get(socket.assigns.slide.transforms || %{}, "", socket.assigns.auto_transforms)
     new_active_transforms = Enum.reduce(drags, active_transforms, fn drag, m ->
       %{"item" => item_id, "x" => x, "y" => y, "z" => z, "size" => size} = drag
@@ -514,7 +540,6 @@ defmodule MkapsWeb.BoardLive do
     end)
     transforms = Map.put(socket.assigns.slide.transforms || %{}, "", new_active_transforms)
     slide = socket.assigns.slide |> Slide.changeset(%{transforms: transforms}) |> Repo.update!
-    # todo
     focus_id =
       if length(drags) == 1 do
         Map.get(Enum.at(drags, 0), "item")
@@ -523,7 +548,7 @@ defmodule MkapsWeb.BoardLive do
       end
     {:noreply,
      socket
-     |> assign(:lesson, &update_lesson_slide(&1, slide))
+     |> update(:lesson, &update_lesson_slide(&1, slide))
      |> assign(slide: slide)
      |> assign(focus_id: focus_id)}
   end
@@ -573,9 +598,9 @@ defmodule MkapsWeb.BoardLive do
   end
 
   defp decode_transforms(params) do
-    case Map.get(params, "transforms", "null") do
-      "null" -> Map.delete(params, "transforms")
-      transforms -> Jason.decode!(transforms)
+    case Map.get(params, "transforms", "") do
+      "" -> Map.delete(params, "transforms")
+      transforms -> %{params | "transforms" => Jason.decode!(transforms)}
     end
   end
 
@@ -610,10 +635,10 @@ defmodule MkapsWeb.BoardLive do
     "left:#{x}px;top:#{y}px;z-index:#{z};width:#{px}px"
   end
 
-  defp is_word?(s), do: String.length(s) < 3 or not String.contains?(s, [" ", ".", "。"])
+  defp is_word?(s), do: String.length(s) <= 4 or not String.contains?(s, [" ", ".", "。"])
 
   defp auto_transform(slide) do
-    words_per_row = 4
+    words_per_row = 5
     images_per_row = 4
 
     sentences = String.split(slide.sentences || "", "\n")
