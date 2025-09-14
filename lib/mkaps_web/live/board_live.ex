@@ -120,8 +120,8 @@ defmodule MkapsWeb.BoardLive do
         <.link class="join-item btn btn-accent" patch={~p"/lessons/#{@form[:lesson_id].value}/slides/#{@form[:position].value}"}>Play</.link>
       </div>
       <div :if={@form[:images].value}>
-        <img class="h-24 w-auto inline m-1"
-          :for={image <- String.split(@form[:images].value, "\n")}
+        <img :for={image <- String.split(@form[:images].value, "\n")}
+          class="h-24 w-auto inline m-1"
           src={Enum.at(String.split(image, " "), 0)} />
       </div>
       <textarea class={["textarea", Map.has_key?(@form.source.changes, :transforms) && "textarea-primary"]}
@@ -151,8 +151,8 @@ defmodule MkapsWeb.BoardLive do
     </form>
     <div>Click one of them to copy image link</div>
     <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-      <div class="flex flex-col items-center space-y-2"
-        :for={image <- @uploaded_images}
+      <div :for={image <- @uploaded_images}
+        class="flex flex-col items-center space-y-2"
         phx-hook="CopyOnClick" id={"image-#{image}"} data-copy-text={"/uploads/#{image}"}>
         <span>{image}</span>
         <img src={"/uploads/#{image}"} class="w-full max-w-xs max-h-64 object-contain" />
@@ -168,21 +168,24 @@ defmodule MkapsWeb.BoardLive do
   attr :highlights, :map, required: true
   defp show_sentences(assigns) do
     ~H"""
-    <span class={["absolute w-max max-w-[1080px] px-[0.4em] py-[0.1em]",
-      "rounded-lg bg-stone-100 shadow-sm/100 text-black leading-[1.1] kai",
-      "mkaps-sentence mkaps-drag"]}
-      :for={{sentence, i} <- Enum.with_index(String.split(@sentences, "\n"))}
+    <span :for={{sentence, i} <- Enum.with_index(String.split(@sentences, "\n"))}
       :if={sentence != ""}
+      class={["absolute w-max max-w-[1080px] px-[0.4em] py-[0.1em]",
+        "rounded-lg bg-stone-100 shadow-sm/100 text-black leading-[1.1] kai",
+        "mkaps-sentence mkaps-drag"]}
       phx-hook="Touchable" id={"sentence-#{i}"}
       style={get_sentence_style(@transforms, @auto_transforms, "sentence-#{i}")}>
-      <span :for={{{grapheme, deco}, j} <- Enum.with_index(graphemes(sentence))}
-        phx-hook="Touchable" id={"#{@slide_id}-#{i}-#{j}"}
-        class={["inline-block mkaps-grapheme",
-          "#{@slide_id}-#{i}-#{j}" in @highlights && "text-violet-900 bg-violet-200",
-          "#{@slide_id}-#{i}-#{j-1}" not in @highlights && "rounded-l-md",
-          "#{@slide_id}-#{i}-#{j+1}" not in @highlights && "rounded-r-md",
-          deco == "underline" && "underline underline-offset-[0.15em]"]}>
-        {if grapheme == " ", do: raw("&nbsp;"), else: grapheme}
+      <span :for={{{grapheme_group, deco}, j} <- Enum.with_index(grapheme_groups(sentence))}
+        class="whitespace-nowrap inline-block">
+        <span :for={{grapheme, k} <- Enum.with_index(grapheme_group)}
+          phx-hook="Touchable" id={"#{@slide_id}-#{i}-#{j}-#{k}"}
+          class={["inline-block mkaps-grapheme",
+            "#{@slide_id}-#{i}-#{j}-#{k}" in @highlights && "text-violet-900 bg-violet-200",
+            "#{@slide_id}-#{i}-#{j}-#{k-1}" not in @highlights && "rounded-l-md",
+            "#{@slide_id}-#{i}-#{j}-#{k+1}" not in @highlights && "rounded-r-md",
+            deco == "underline" && "underline underline-offset-[0.15em]"]}>
+          {if grapheme == " ", do: raw("&nbsp;"), else: grapheme}
+        </span>
       </span>
     </span>
     """
@@ -195,10 +198,10 @@ defmodule MkapsWeb.BoardLive do
   attr :image_frames, :map, required: true
   defp show_images(assigns) do
     ~H"""
-    <img class="absolute h-auto shadow-sm/100 rounded-lg mkaps-image mkaps-drag"
-      draggable="false"
-      :for={{image, i} <- Enum.with_index(String.split(@images, "\n"))}
+    <img :for={{image, i} <- Enum.with_index(String.split(@images, "\n"))}
       :if={image != ""}
+      class="absolute h-auto shadow-sm/100 rounded-lg mkaps-image mkaps-drag"
+      draggable="false"
       src={Enum.at(String.split(image, " "), Map.get(@image_frames, "#{@slide_id}-#{i}", 0))}
       phx-hook="Touchable" id={"image-#{i}"}
       style={get_image_style(@transforms, @auto_transforms, "image-#{i}")} />
@@ -540,12 +543,8 @@ defmodule MkapsWeb.BoardLive do
     end)
     transforms = Map.put(socket.assigns.slide.transforms || %{}, "", new_active_transforms)
     slide = socket.assigns.slide |> Slide.changeset(%{transforms: transforms}) |> Repo.update!
-    focus_id =
-      if length(drags) == 1 do
-        Map.get(Enum.at(drags, 0), "item")
-      else
-        nil
-      end
+    IO.inspect(length(drags))
+    focus_id = Map.get(Enum.at(drags, 0), "item")
     {:noreply,
      socket
      |> update(:lesson, &update_lesson_slide(&1, slide))
@@ -559,35 +558,19 @@ defmodule MkapsWeb.BoardLive do
   end
 
   def handle_event("toggle-highlight", %{"key" => key}, socket) do
-    [_slide_id, i, j] = String.split(key, "-")
-    slide = socket.assigns.slide
-    sentence = Enum.at(String.split(slide.sentences, "\n"), String.to_integer(i))
-    {belongs_here, acc} =
-      Enum.reduce(Enum.with_index(graphemes(sentence)), {0, []}, fn {{grapheme, _deco}, k}, {belongs_here, acc} ->
-        if belongs_here == 2 do
-          {2, acc}
-        else
-          if is_ascii_letter_or_digit(grapheme) do
-            {(if k == String.to_integer(j), do: 1, else: belongs_here), [k | acc]}
-          else
-            if belongs_here == 1 do
-              {2, acc}
-            else
-              {0, []}
-            end
-          end
-        end
-      end)
-    neighbours = if belongs_here == 0, do: [], else: acc
-    highlight_count = Enum.count(neighbours, &MapSet.member?(socket.assigns.highlights, "#{slide.id}-#{i}-#{&1}"))
+    [slide_id, i, j, _k] = String.split(key, "-")
+    sentence = Enum.at(String.split(socket.assigns.slide.sentences, "\n"), String.to_integer(i))
+    {group, _deco} = Enum.at(grapheme_groups(sentence), String.to_integer(j))
+    indices = 0..(length(group)-1)
+    highlight_count = Enum.count(indices, fn k -> "#{slide_id}-#{i}-#{j}-#{k}" in socket.assigns.highlights end)
     highlights =
-      if highlight_count >= 2 and highlight_count == length(neighbours) do
-        MapSet.put(Enum.reduce(neighbours, socket.assigns.highlights, &MapSet.delete(&2, "#{slide.id}-#{i}-#{&1}")), key)
+      if highlight_count >= 2 and highlight_count == length(group) do
+        MapSet.put(Enum.reduce(indices, socket.assigns.highlights, &MapSet.delete(&2, "#{slide_id}-#{i}-#{j}-#{&1}")), key)
       else
-        if highlight_count == 0 and length(neighbours) > 0 do
-          Enum.reduce(neighbours, socket.assigns.highlights, &MapSet.put(&2, "#{slide.id}-#{i}-#{&1}"))
+        if highlight_count == 0 do
+          Enum.reduce(indices, socket.assigns.highlights, &MapSet.put(&2, "#{slide_id}-#{i}-#{j}-#{&1}"))
         else
-          if MapSet.member?(socket.assigns.highlights, key) do
+          if key in socket.assigns.highlights do
             MapSet.delete(socket.assigns.highlights, key)
           else
             MapSet.put(socket.assigns.highlights, key)
@@ -688,35 +671,28 @@ defmodule MkapsWeb.BoardLive do
     Map.new(Enum.with_index(l, fn [x,y,_,px], i -> {"image-#{i}", [x,y,begin_z+i,px]} end))
   end
 
-  defp graphemes(s) do
-    parse_graphemes(String.graphemes(s), [])
+  defp grapheme_groups(s) do
+    parse_grapheme_groups(String.graphemes(s), [])
   end
 
-  defp parse_graphemes([], acc), do: Enum.reverse(acc)
+  defp parse_grapheme_groups([], acc), do: Enum.reverse(acc)
 
-  defp parse_graphemes(["_" | rest], acc) do
+  defp parse_grapheme_groups(["_" | rest], acc) do
     {underlined, remaining} = collect_until(rest, "_", [])
-    merged = Enum.join(underlined)
-    parse_graphemes(remaining, [{merged, "underline"} | acc])
+    parse_grapheme_groups(remaining, [{underlined, "underline"} | acc])
   end
 
-  defp parse_graphemes(["(" | rest], acc) do
-    {underlined, remaining} = collect_until(rest, ")", [])
-    merged = Enum.join(underlined)
-    parse_graphemes(remaining, [{merged, nil} | acc])
+  defp parse_grapheme_groups(["(" | rest], acc) do
+    {group, remaining} = collect_until(rest, ")", [])
+    parse_grapheme_groups(remaining, [{group, nil} | acc])
   end
 
-  defp parse_graphemes(["|" | rest], acc) do
-    parse_graphemes(rest, acc)
-  end
-
-  defp parse_graphemes([char | rest], acc) do
-    if is_ascii_letter_or_digit(char) and false do
+  defp parse_grapheme_groups([char | rest], acc) do
+    if is_ascii_letter_or_digit(char) do
       {group, remaining} = collect_while([char | rest], &is_ascii_letter_or_digit/1, [])
-      merged = Enum.join(group)
-      parse_graphemes(remaining, [{merged, nil} | acc])
+      parse_grapheme_groups(remaining, [{group, nil} | acc])
     else
-      parse_graphemes(rest, [{char, nil} | acc])
+      parse_grapheme_groups(rest, [{[char], nil} | acc])
     end
   end
 

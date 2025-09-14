@@ -172,12 +172,14 @@ Hooks.Touchable = {
         // be State 1
         pointers.splice(i, 1)
         if (el.matches('.mkaps-grapheme')) {
-          this.pushEvent('drags', commitDraggings())
+          const events = commitDraggings()
+          if (event.length > 0) sthis.pushEvent('drags', events)
           this.pushEvent("toggle-highlight", {
             key: el.id
           })
         } else if (el.matches('.mkaps-image')) {
-          this.pushEvent('drags', commitDraggings())
+          const events = commitDraggings()
+          if (event.length > 0) sthis.pushEvent('drags', events)
           this.pushEvent('flip', {
             image: el.id
           })
