@@ -126,6 +126,8 @@ defmodule MkapsWeb.BoardLive do
       </div>
       <textarea class={["textarea", Map.has_key?(@form.source.changes, :transforms) && "textarea-primary"]}
         name={@form[:transforms].name} placeholder="Transforms">{Jason.encode!(@form[:transforms].value || %{})}</textarea>
+      <textarea class={["textarea", Map.has_key?(@form.source.changes, :avatars) && "textarea-primary"]}
+        name={@form[:avatars].name} placeholder="Avatars">{Map.get(@form[:avatars].value || %{}, "names") || ""}</textarea>
     </.form>
     """
   end
@@ -208,22 +210,47 @@ defmodule MkapsWeb.BoardLive do
     """
   end
 
-  attr :hue, :integer, required: true
-  defp show_avatars_ui(assigns) do
+  attr :avatars, :map, required: true
+  attr :focus_id, :string, default: nil
+  attr :transforms, :map, required: true
+  attr :auto_transforms, :map, required: true
+  defp show_avatars(assigns) do
+    ~H"""
+    <span :for={{name, i} <- Enum.with_index(String.split(Map.get(@avatars, "names", ""), "\n"))}
+      :if={name != ""}
+      class="absolute h-auto mkaps-avatar mkaps-drag"
+      phx-hook="Touchable" id={"avatar-#{i}"}
+      style={get_avatar_style(@transforms, @auto_transforms, "avatar-#{i}")}>
+      <img class="w-full" draggable="false" src="/uploads/8ebf6bb7-a9f3-4747-9779-5cfef787b514.png"
+        style={"filter:hue-rotate(#{Map.get(Map.get(@avatars, "avatar-#{i}", %{}), "hue", 180)}deg) brightness(1.5)" <>
+          if @focus_id == "avatar-#{i}", do: " drop-shadow(0 0 5px #ff0)", else: ""} />
+      <span class="absolute bottom-[9%] left-[26%] -translate-x-1/2 rotate-14 text-black kai"
+        style={"#{get_avatar_name_size(@transforms, @auto_transforms, "avatar-#{i}")};text-shadow: 0 0 4px white"}>{name}</span>
+      <span class="absolute rotate-14"
+        style={"#{get_avatar_badge_size(@transforms, @auto_transforms, "avatar-#{i}")};top:9%;left:19%;width:48%;text-shadow: 0 0 4px white"}>
+        {Enum.join(Enum.reverse(Map.get(Map.get(@avatars, "avatar-#{i}", %{}), "badges", [])))}
+      </span>
+    </span>
+    """
+  end
+
+  attr :avatars, :map, required: true
+  attr :focus_id, :string, required: true
+  defp show_avatar_ui(assigns) do
     ~H"""
     <div class="join">
       <button class="join-item btn btn-sm kai btn-outline"
-        phx-click="badge" phx-value-badge="👍">👍</button>
+        phx-click="add-badge" phx-value-badge="👍">👍</button>
       <button class="join-item btn btn-sm kai btn-outline"
-        phx-click="badge" phx-value-badge="⭐">⭐</button>
+        phx-click="add-badge" phx-value-badge="⭐">⭐</button>
       <button class="join-item btn btn-sm kai btn-outline"
-        phx-click="badge" phx-value-badge="❤️">❤️</button>
+        phx-click="add-badge" phx-value-badge="❤️">❤️</button>
       <button class="join-item btn btn-sm kai btn-outline"
-        phx-click="delete-badge">X</button>
+        phx-click="delete-badge" disabled={Map.get(Map.get(@avatars, @focus_id, %{}), "badges", []) == []}>X</button>
     </div>
     <div class="join">
       <button class="join-item btn btn-sm kai btn-outline" phx-click="hue-left">&lt;</button>
-      <button class="join-item btn btn-sm btn-outline" disabled>{@hue}</button>
+      <button class="join-item btn btn-sm btn-outline" disabled>{div(Map.get(Map.get(@avatars, @focus_id, %{}), "hue", 180), 30) + 1}</button>
       <button class="join-item btn btn-sm kai btn-outline" phx-click="hue-right">&gt;</button>
     </div>
     """
@@ -302,7 +329,7 @@ defmodule MkapsWeb.BoardLive do
   attr :slide, Slide, default: nil
   attr :slide_position, :integer, required: true
   attr :auto_transforms, :map, required: true
-  attr :focus_id, :string, required: true
+  attr :focus_id, :string, default: nil
   defp show_slide(assigns) do
     ~H"""
     <div class={["w-[1280px] h-[720px] bg-[url(/images/background1.jpg)] bg-cover bg-center relative overflow-hidden select-none",
@@ -321,6 +348,8 @@ defmodule MkapsWeb.BoardLive do
       <.show_images :if={@slide && @slide.images} images={@slide.images}
         transforms={Map.get(@slide.transforms || %{}, "", %{})} auto_transforms={@auto_transforms}
         slide_id={@slide.id} image_frames={@image_frames} />
+      <.show_avatars :if={@slide && @slide.avatars} avatars={@slide.avatars || %{}} focus_id={@focus_id}
+        transforms={Map.get(@slide.transforms || %{}, "", %{})} auto_transforms={@auto_transforms} />
     </div>
     <div class="fixed z-9999 bottom-0 left-1/2 transform -translate-x-1/2 join">
       <.link :for={slide <- @lesson.slides}
@@ -332,6 +361,7 @@ defmodule MkapsWeb.BoardLive do
       <.link class="btn btn-circle btn-outline" patch={~p"/lessons/#{@lesson.id}/slides/#{@slide_position+1}"}>&gt;</.link>
     </div>
     <div class="fixed z-9999 bottom-0 left-0 flex flex-col">
+      <.show_avatar_ui :if={@slide && @slide.avatars && @focus_id} avatars={@slide.avatars} focus_id={@focus_id} />
       <.show_save_transforms :if={@slide && @slide.transforms} transforms_state={@transforms_state} transforms={@slide.transforms} />
       <.show_toggle_background_gestures toggle_scroll={@toggle_scroll} toggle_sentences={@toggle_sentences} toggle_images={@toggle_images} />
       <.show_toggle_gestures toggle_pan={@toggle_pan} toggle_zoom={@toggle_zoom} toggle_rotate={@toggle_rotate} />
@@ -381,15 +411,19 @@ defmodule MkapsWeb.BoardLive do
 
   def handle_event("change-slide", %{"slide" => params}, socket) do
     id = String.to_integer(Map.get(params, "id", "-1"))
+    avatars = if id == -1, do: nil, else: Enum.find(socket.assigns.lesson.slides, &(&1.id == id))
+    decode_params = params |> decode_transforms |> decode_avatars(avatars || %{})
     {:noreply,
      socket
-     |> update(:slide_changes, &Map.put(&1, id, decode_transforms(params)))}
+     |> update(:slide_changes, &Map.put(&1, id, decode_params))}
   end
 
   def handle_event("submit-slide", %{"slide" => %{"id" => _} = params}, socket) do
     id = String.to_integer(params["id"])
     lesson_id = String.to_integer(params["lesson_id"])
-    Slide |> Repo.get!(id) |> Slide.changeset(decode_transforms(params)) |> Repo.update!
+    avatars = Enum.find(socket.assigns.lesson.slides, &(&1.id == id)).avatars
+    decode_params = params |> decode_transforms |> decode_avatars(avatars || %{})
+    Slide |> Repo.get!(id) |> Slide.changeset(decode_params) |> Repo.update!
     {:noreply,
      socket
      |> assign(lesson: Lesson |> preload(:slides) |> Repo.get!(lesson_id))
@@ -400,7 +434,8 @@ defmodule MkapsWeb.BoardLive do
     lesson_id = String.to_integer(params["lesson_id"])
     {:ok, _} = Repo.transact(fn ->
       max_pos = Slide |> where(lesson_id: ^lesson_id) |> Repo.aggregate(:max, :position)
-      %Slide{} |> Slide.changeset(Map.put(decode_transforms(params), "position", (max_pos || 0)+1)) |> Repo.insert
+      decode_params = params |> decode_transforms |> decode_avatars(%{})
+      %Slide{} |> Slide.changeset(Map.put(decode_params, "position", (max_pos || 0)+1)) |> Repo.insert
     end)
     {:noreply,
      socket
@@ -535,6 +570,10 @@ defmodule MkapsWeb.BoardLive do
      |> assign(focus_id: "image-" <> i)}
   end
 
+  def handle_event("focus", %{"avatar" => avatar}, socket) do
+    {:noreply, update(socket, :focus_id, &(if &1 == avatar, do: nil, else: avatar))}
+  end
+
   def handle_event("drags", drags, socket) do
     active_transforms = Map.get(socket.assigns.slide.transforms || %{}, "", socket.assigns.auto_transforms)
     new_active_transforms = Enum.reduce(drags, active_transforms, fn drag, m ->
@@ -543,7 +582,6 @@ defmodule MkapsWeb.BoardLive do
     end)
     transforms = Map.put(socket.assigns.slide.transforms || %{}, "", new_active_transforms)
     slide = socket.assigns.slide |> Slide.changeset(%{transforms: transforms}) |> Repo.update!
-    IO.inspect(length(drags))
     focus_id = Map.get(Enum.at(drags, 0), "item")
     {:noreply,
      socket
@@ -577,7 +615,59 @@ defmodule MkapsWeb.BoardLive do
           end
         end
       end
-    {:noreply, assign(socket, highlights: highlights)}
+    {:noreply,
+     socket
+     |> assign(highlights: highlights)
+     |> assign(focus_id: "sentence-#{i}")}
+  end
+
+  def handle_event("add-badge", %{"badge" => badge}, socket) do
+    avatar = Map.get(socket.assigns.slide.avatars || %{}, socket.assigns.focus_id)
+    new_avatar = Map.update(avatar || %{}, "badges", [badge], &([badge | &1]))
+    avatars = Map.put(socket.assigns.slide.avatars || %{}, socket.assigns.focus_id, new_avatar)
+    slide = socket.assigns.slide |> Slide.changeset(%{avatars: avatars}) |> Repo.update!
+    {:noreply,
+     socket
+     |> update(:lesson, &update_lesson_slide(&1, slide))
+     |> assign(slide: slide)}
+  end
+
+  def handle_event("delete-badge", _params, socket) do
+    avatar = Map.get(socket.assigns.slide.avatars || %{}, socket.assigns.focus_id)
+    new_avatar = Map.update(avatar || %{}, "badges", [], fn badges ->
+      case badges do
+        [_badge | rest] -> rest
+        [] -> []
+      end
+    end)
+    avatars = Map.put(socket.assigns.slide.avatars || %{}, socket.assigns.focus_id, new_avatar)
+    slide = socket.assigns.slide |> Slide.changeset(%{avatars: avatars}) |> Repo.update!
+    {:noreply,
+     socket
+     |> update(:lesson, &update_lesson_slide(&1, slide))
+     |> assign(slide: slide)}
+  end
+
+  def handle_event("hue-left", _params, socket) do
+    avatar = Map.get(socket.assigns.slide.avatars || %{}, socket.assigns.focus_id)
+    new_avatar = Map.update(avatar || %{}, "hue", 150, &(rem(&1 + 330, 360)))
+    avatars = Map.put(socket.assigns.slide.avatars || %{}, socket.assigns.focus_id, new_avatar)
+    slide = socket.assigns.slide |> Slide.changeset(%{avatars: avatars}) |> Repo.update!
+    {:noreply,
+     socket
+     |> update(:lesson, &update_lesson_slide(&1, slide))
+     |> assign(slide: slide)}
+  end
+
+  def handle_event("hue-right", _params, socket) do
+    avatar = Map.get(socket.assigns.slide.avatars || %{}, socket.assigns.focus_id)
+    new_avatar = Map.update(avatar || %{}, "hue", 210, &(rem(&1 + 30, 360)))
+    avatars = Map.put(socket.assigns.slide.avatars || %{}, socket.assigns.focus_id, new_avatar)
+    slide = socket.assigns.slide |> Slide.changeset(%{avatars: avatars}) |> Repo.update!
+    {:noreply,
+     socket
+     |> update(:lesson, &update_lesson_slide(&1, slide))
+     |> assign(slide: slide)}
   end
 
   defp decode_transforms(params) do
@@ -585,6 +675,11 @@ defmodule MkapsWeb.BoardLive do
       "" -> Map.delete(params, "transforms")
       transforms -> %{params | "transforms" => Jason.decode!(transforms)}
     end
+  end
+
+  defp decode_avatars(params, avatars) do
+    names = Map.get(params, "avatars")
+    %{params | "avatars" => Map.put(avatars, "names", names)}
   end
 
   defp update_lesson_slide(lesson, slide) do
@@ -618,20 +713,43 @@ defmodule MkapsWeb.BoardLive do
     "left:#{x}px;top:#{y}px;z-index:#{z};width:#{px}px"
   end
 
+  defp get_avatar_style(active_transforms, auto_transforms, id) do
+    [x,y,z,px] = Map.get(active_transforms, id, Map.get(auto_transforms, id))
+    "left:#{x}px;top:#{y}px;z-index:#{z};width:#{px}px"
+  end
+
+  defp get_avatar_name_size(active_transforms, auto_transforms, id) do
+    [_,_,_,px] = Map.get(active_transforms, id, Map.get(auto_transforms, id))
+    "font-size:#{trunc(px / 10)}px"
+  end
+
+  defp get_avatar_badge_size(active_transforms, auto_transforms, id) do
+    [_,_,_,px] = Map.get(active_transforms, id, Map.get(auto_transforms, id))
+    "font-size:#{trunc(px / 12)}px"
+  end
+
   defp is_word?(s), do: String.length(s) <= 4 or not String.contains?(s, [" ", ".", "?","。","？"])
+
+  defp even_per_row(n) do
+    cond do
+      n <= 3 -> 3
+      n <= 5 -> n
+      n <= 10 -> Float.ceil(n / 2)
+      n <= 18 -> Float.ceil(n / 3)
+      n <= 28 -> Float.ceil(n / 4)
+      true -> Float.ceil(n / 5)
+    end
+    |> trunc
+  end
 
   defp auto_transform(slide) do
     sentences = String.split(slide.sentences || "", "\n")
     images = String.split(slide.images || "", "\n")
+    avatars = String.split(Map.get(slide.avatars || %{}, "names", ""), "\n")
     words_per_row = 5
-    len = length(images)
-    images_per_row =
-      cond do
-        len <= 3 -> 3
-        len <= 5 -> len
-        len <= 10 -> div(len + 1, 2)
-        true -> div(len + 2, 3)
-      end
+    images_per_row = even_per_row(length(images))
+    IO.inspect(images_per_row)
+    avatars_per_row = even_per_row(length(avatars))
     sentence_rows = Enum.sum_by(Enum.chunk_by(sentences, &is_word?/1), fn [e | rest] ->
       if is_word?(e) do
         Float.ceil(length([e | rest]) / words_per_row)
@@ -640,10 +758,12 @@ defmodule MkapsWeb.BoardLive do
       end
     end)
     image_rows = Float.ceil(length(images) / images_per_row)
-    dy = Enum.min([100, (720 - 100) / (sentence_rows + image_rows)])
-    a = auto_transform_sentences(sentences, dy, words_per_row)
-    b = auto_transform_images(images, sentence_rows * dy, dy, images_per_row, length(sentences)+1)
-    Map.merge(a, b)
+    avatar_rows = Float.ceil(length(images) / images_per_row)
+    dy = Enum.min([100, (720 - 100) / (sentence_rows + image_rows + avatar_rows)])
+    %{}
+    |> Map.merge(auto_transform_sentences(sentences, dy, words_per_row))
+    |> Map.merge(auto_transform_images(images, sentence_rows * dy, dy, images_per_row, length(sentences)+1))
+    |> Map.merge(auto_transform_avatars(avatars, (sentence_rows + image_rows) * dy, dy, avatars_per_row, length(sentences)+length(images)+1))
   end
 
   defp auto_transform_sentences(sentences, dy, words_per_row) do
@@ -675,6 +795,16 @@ defmodule MkapsWeb.BoardLive do
       end)
     end))
     Map.new(Enum.with_index(l, fn [x,y,_,px], i -> {"image-#{i}", [x,y,begin_z+i,px]} end))
+  end
+
+  defp auto_transform_avatars(avatars, begin_y, dy, avatars_per_row, begin_z) do
+    dx = (1280 - 200) / avatars_per_row
+    l = Enum.concat(Enum.with_index(Enum.chunk_every(avatars, avatars_per_row), fn row, y ->
+      Enum.with_index(row, fn _avatar, x ->
+        [100 + round(x * dx), round(begin_y + y * dy), 0, dx]
+      end)
+    end))
+    Map.new(Enum.with_index(l, fn [x,y,_,px], i -> {"avatar-#{i}", [x,y,begin_z+i,px]} end))
   end
 
   defp grapheme_groups(s) do

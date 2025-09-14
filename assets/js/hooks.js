@@ -7,6 +7,17 @@ let boardDragging = false
 const getSize = (el) => {
   if (el.matches('.mkaps-sentence')) return parseInt(el.style.fontSize, 10)
   if (el.matches('.mkaps-image')) return parseInt(el.style.width, 10)
+  if (el.matches('.mkaps-avatar')) return parseInt(el.style.width, 10)
+}
+
+const xyzSize = (el) => {
+  return {
+    item: el.id,
+    x: parseInt(el.style.left, 10),
+    y: parseInt(el.style.top, 10),
+    z: parseInt(el.style.zIndex, 10),
+    size: getSize(el)
+  }
 }
 
 const sink = (el) => {
@@ -22,88 +33,33 @@ const sink = (el) => {
     z = Math.min(z, parseInt(e.style.zIndex, 10))
   }
   el.style.zIndex = z
-
-  const events = []
-  events.push({
-    item: el.id,
-    x: parseInt(el.style.left, 10),
-    y: parseInt(el.style.top, 10),
-    z: parseInt(el.style.zIndex, 10),
-    size: getSize(el)
-  })
-
+  const events = [xyzSize(el)]
   for (const e of document.querySelectorAll('.mkaps-drag')) {
     if (e === el) continue
     if (parseInt(e.style.zIndex, 10) == 9999) continue
     if (parseInt(e.style.zIndex, 10) < z) continue
     e.style.zIndex = parseInt(e.style.zIndex, 10) + 1
-    events.push({
-      item: e.id,
-      x: parseInt(e.style.left, 10),
-      y: parseInt(e.style.top, 10),
-      z: parseInt(e.style.zIndex, 10),
-      size: getSize(e)
-    })
+    events.push(xyzSize(e))
   }
   return events
 }
 
 const setAllOrigins = (origins) => {
-  for (const e of document.querySelectorAll('.mkaps-sentence')) {
-    origins.set(e, {
-      x: parseInt(e.style.left, 10),
-      y: parseInt(e.style.top, 10),
-      z: parseInt(e.style.zIndex, 10),
-      size: getSize(e)
-    })
-  }
-  for (const e of document.querySelectorAll('.mkaps-image')) {
-    origins.set(e, {
-      x: parseInt(e.style.left, 10),
-      y: parseInt(e.style.top, 10),
-      z: parseInt(e.style.zIndex, 10),
-      size: getSize(e)
-    })
-  }
+  const es = []
+  for (const e of document.querySelectorAll('.mkaps-sentence')) es.push(e)
+  for (const e of document.querySelectorAll('.mkaps-image')) es.push(e)
+  for (const e of document.querySelectorAll('.mkaps-avatar')) es.push(e)
+  for (const e of es) origins.set(e, xyzSize(e))
 }
 
 const persistent = (el) => {
   const events = []
   if (el.matches('.mkaps-toggle-sentences')) {
-    for (const e of document.querySelectorAll('.mkaps-sentence')) {
-      events.push({
-        item: e.id,
-        x: parseInt(e.style.left, 10),
-        y: parseInt(e.style.top, 10),
-        z: parseInt(e.style.zIndex, 10),
-        size: getSize(e)
-      })
-    }
+    events.push(...Array.from(document.querySelectorAll('.mkaps-sentence')).map(xyzSize))
   }
   if (el.matches('.mkaps-toggle-images')) {
-    for (const e of document.querySelectorAll('.mkaps-image')) {
-      events.push({
-        item: e.id,
-        x: parseInt(e.style.left, 10),
-        y: parseInt(e.style.top, 10),
-        z: parseInt(e.style.zIndex, 10),
-        size: getSize(e)
-      })
-    }
-  }
-  return events
-}
-
-const commitDraggings = () => {
-  const events = []
-  for (const e of draggings) {
-    events.push({
-      item: e.id,
-      x: parseInt(e.style.left, 10),
-      y: parseInt(e.style.top, 10),
-      z: parseInt(e.style.zIndex, 10),
-      size: getSize(e)
-    })
+    events.push(...Array.from(document.querySelectorAll('.mkaps-image')).map(xyzSize))
+    events.push(...Array.from(document.querySelectorAll('.mkaps-avatar')).map(xyzSize))
   }
   return events
 }
@@ -172,16 +128,19 @@ Hooks.Touchable = {
         // be State 1
         pointers.splice(i, 1)
         if (el.matches('.mkaps-grapheme')) {
-          const events = commitDraggings()
-          if (event.length > 0) sthis.pushEvent('drags', events)
+          if (draggings.size > 0) this.pushEvent('drags', Array.from(draggings).map(xyzSize))
           this.pushEvent("toggle-highlight", {
             key: el.id
           })
         } else if (el.matches('.mkaps-image')) {
-          const events = commitDraggings()
-          if (event.length > 0) sthis.pushEvent('drags', events)
+          if (draggings.size > 0) this.pushEvent('drags', Array.from(draggings).map(xyzSize))
           this.pushEvent('flip', {
             image: el.id
+          })
+        } else if (el.matches('.mkaps-avatar')) {
+          if (draggings.size > 0) this.pushEvent('drags', Array.from(draggings).map(xyzSize))
+          this.pushEvent('focus', {
+            avatar: el.id
           })
         }
       } else if (pointers.length == 1) {
@@ -212,13 +171,7 @@ Hooks.Touchable = {
           pointers[0].elY = parseInt(el.style.top, 10)
           pointers[0].elZ = parseInt(el.style.zIndex, 10)
           pointers[0].elSize = getSize(el)
-          this.pushEvent('drags', [{
-            item: el.id,
-            x: parseInt(el.style.left, 10),
-            y: parseInt(el.style.top, 10),
-            z: parseInt(el.style.zIndex, 10),
-            size: getSize(el)
-          }])
+          this.pushEvent('drags', [xyzSize(el)])
         }
       }
     }
@@ -233,14 +186,9 @@ Hooks.Touchable = {
         if (draggings.size > 0) {
           // invalidate all other pointers
           myTicker = ++ticker
-
           // persistent draggings
-          const events = []
-          for (const el of draggings) {
-            events.push(...sink(el))
-          }
+          this.pushEvent('drags', [].concat(...Array.from(draggings).map(sink)))
           draggings.clear()
-          this.pushEvent('drags', events)
         }
         if (el.matches('.mkaps-toggle-sentences')) {
           for (const el of document.querySelectorAll('.mkaps-sentence')) {
@@ -250,6 +198,10 @@ Hooks.Touchable = {
         }
         if (el.matches('.mkaps-toggle-images')) {
           for (const el of document.querySelectorAll('.mkaps-image')) {
+            el.style.left = `${p.x - (p.originX - p.origins.get(el).x)}px`
+            el.style.top = `${p.y - (p.originY - p.origins.get(el).y)}px`
+          }
+          for (const el of document.querySelectorAll('.mkaps-avatar')) {
             el.style.left = `${p.x - (p.originX - p.origins.get(el).x)}px`
             el.style.top = `${p.y - (p.originY - p.origins.get(el).y)}px`
           }
@@ -272,7 +224,28 @@ Hooks.Touchable = {
       const p = pointers[0]
       const q = pointers[1]
       if (el.id == 'board') {
-        // todo
+        const len0 = Math.sqrt(Math.pow(p.originX - q.originX, 2) + Math.pow(p.originY - q.originY, 2))
+        const len1 = Math.sqrt(Math.pow(p.x - q.x, 2) + Math.pow(p.y - q.y, 2))
+        const r = Math.max(0.5, Math.min(2, len1 / len0))
+        if (el.matches('.mkaps-toggle-sentences')) {
+          for (const e of document.querySelectorAll('.mkaps-sentence')) {
+            e.style.left = `${p.x - Math.round((p.originX - p.origins.get(e).x) * r)}px`
+            e.style.top = `${p.y - Math.round((p.originY - p.origins.get(e).y) * r)}px`
+            e.style.fontSize = `${Math.round(p.origins.get(e).size * r)}px`
+          }
+        }
+        if (el.matches('.mkaps-toggle-images')) {
+          for (const e of document.querySelectorAll('.mkaps-image')) {
+            e.style.left = `${p.x - Math.round((p.originX - p.origins.get(e).x) * r)}px`
+            e.style.top = `${p.y - Math.round((p.originY - p.origins.get(e).y) * r)}px`
+            e.style.width = `${Math.round(p.origins.get(e).size * r)}px`
+          }
+          for (const e of document.querySelectorAll('.mkaps-avatar')) {
+            e.style.left = `${p.x - Math.round((p.originX - p.origins.get(e).x) * r)}px`
+            e.style.top = `${p.y - Math.round((p.originY - p.origins.get(e).y) * r)}px`
+            e.style.width = `${Math.round(p.origins.get(e).size * r)}px`
+          }
+        }
       } else {
         const len0 = Math.sqrt(Math.pow(p.originX - q.originX, 2) + Math.pow(p.originY - q.originY, 2))
         const len1 = Math.sqrt(Math.pow(p.x - q.x, 2) + Math.pow(p.y - q.y, 2))
@@ -281,7 +254,7 @@ Hooks.Touchable = {
           el.style.left = `${p.x - Math.round((p.originX - p.elX) * r)}px`
           el.style.top = `${p.y - Math.round((p.originY - p.elY) * r)}px`
           el.style.fontSize = `${Math.round(p.elSize * r)}px`
-        } else if (el.matches('.mkaps-image')) {
+        } else if (el.matches('.mkaps-image') || el.matches('.mkaps-avatar')) {
           const r = Math.max(100 / p.elSize, Math.min(1080 / p.elSize, len1 / len0))
           el.style.left = `${p.x - Math.round((p.originX - p.elX) * r)}px`
           el.style.top = `${p.y - Math.round((p.originY - p.elY) * r)}px`
