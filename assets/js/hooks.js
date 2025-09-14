@@ -270,6 +270,7 @@ Hooks.Touchable = {
       const p = pointers[0]
       const q = pointers[1]
       if (el.id == 'board') {
+        // todo
       } else {
         const len0 = Math.sqrt(Math.pow(p.originX - q.originX, 2) + Math.pow(p.originY - q.originY, 2))
         const len1 = Math.sqrt(Math.pow(p.x - q.x, 2) + Math.pow(p.y - q.y, 2))
