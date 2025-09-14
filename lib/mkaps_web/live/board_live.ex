@@ -262,9 +262,9 @@ defmodule MkapsWeb.BoardLive do
   attr :toggle_images, :boolean, required: true
   defp show_toggle_background_gestures(assigns) do
     ~H"""
-    <div class="join tooltip tooltip-right" data-tip="輕觸背景滾動，或操控所有字/圖">
+    <div class="join tooltip tooltip-right" data-tip="輕觸背景捲動，或操控所有字/圖">
       <button class={"join-item btn btn-sm kai #{if @toggle_scroll, do: "btn-primary", else: "btn-outline"}"}
-        phx-click="toggle-scroll">滾</button>
+        phx-click="toggle-scroll">捲</button>
       <button class={"join-item btn btn-sm kai #{if @toggle_sentences, do: "btn-primary", else: "btn-outline"}"}
         phx-click="toggle-sentences">字</button>
       <button class={"join-item btn btn-sm kai #{if @toggle_images, do: "btn-primary", else: "btn-outline"}"}
@@ -618,14 +618,20 @@ defmodule MkapsWeb.BoardLive do
     "left:#{x}px;top:#{y}px;z-index:#{z};width:#{px}px"
   end
 
-  defp is_word?(s), do: String.length(s) <= 4 or not String.contains?(s, [" ", ".", "。"])
+  defp is_word?(s), do: String.length(s) <= 4 or not String.contains?(s, [" ", ".", "?","。","？"])
 
   defp auto_transform(slide) do
-    words_per_row = 5
-    images_per_row = 4
-
     sentences = String.split(slide.sentences || "", "\n")
     images = String.split(slide.images || "", "\n")
+    words_per_row = 5
+    len = length(images)
+    images_per_row =
+      cond do
+        len <= 3 -> 3
+        len <= 5 -> len
+        len <= 10 -> div(len + 1, 2)
+        true -> div(len + 2, 3)
+      end
     sentence_rows = Enum.sum_by(Enum.chunk_by(sentences, &is_word?/1), fn [e | rest] ->
       if is_word?(e) do
         Float.ceil(length([e | rest]) / words_per_row)
@@ -634,7 +640,7 @@ defmodule MkapsWeb.BoardLive do
       end
     end)
     image_rows = Float.ceil(length(images) / images_per_row)
-    dy = (720 - 100) / (sentence_rows + image_rows)
+    dy = Enum.min([100, (720 - 100) / (sentence_rows + image_rows)])
     a = auto_transform_sentences(sentences, dy, words_per_row)
     b = auto_transform_images(images, sentence_rows * dy, dy, images_per_row, length(sentences)+1)
     Map.merge(a, b)
