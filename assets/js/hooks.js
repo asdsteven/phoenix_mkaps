@@ -148,7 +148,8 @@ Hooks.Touchable = {
         // be State 1
         pointers.splice(i, 1)
         if (el.id == 'board') {
-          this.pushEvent('drags', persistent(el))
+          const events = persistent(el)
+          if (events.length > 0) this.pushEvent('drags', events)
           boardDragging = false
         } else if (draggings.has(el)) {
           draggings.delete(el)
@@ -162,7 +163,8 @@ Hooks.Touchable = {
           pointers[0].originY = pointers[0].y
           pointers[0].origins.clear()
           setAllOrigins(pointers[0].origins)
-          this.pushEvent('drags', persistent(el))
+          const events = persistent(el)
+          if (events.length > 0) this.pushEvent('drags', events)
         } else {
           pointers.splice(i, 1)
           pointers[0].originX = pointers[0].x

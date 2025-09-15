@@ -96,6 +96,7 @@ defmodule MkapsWeb.BoardLive do
         <li>Lessons</li>
       </ul>
     </div>
+    <a href="https://sw.hkep.com/?semester=3A&unit=1&lesson=2&words=t311021&access_token=TXBzeWF5cnhVQ01sSlh0RmllVVUzMXFoaTk1blVITDFybUM1TVJGTmNZZnFQR21FWFpPR1dscmZ6b2FUb0dmLw==">詞語</a>
     <.index_lesson form={to_form(Lesson.changeset(%Lesson{}, Map.get(@lesson_changes, -1, %{})))} />
     <.index_lesson :for={lesson <- @lessons} form={to_form(Lesson.changeset(lesson, Map.get(@lesson_changes, lesson.id, %{})))} />
     """
@@ -170,7 +171,7 @@ defmodule MkapsWeb.BoardLive do
   attr :highlights, :map, required: true
   defp show_sentences(assigns) do
     ~H"""
-    <span :for={{sentence, i} <- Enum.with_index(String.split(@sentences, "\n"))}
+    <div :for={{sentence, i} <- Enum.with_index(String.split(@sentences, "\n"))}
       :if={sentence != ""}
       class={["absolute w-max max-w-[1080px] px-[0.4em] py-[0.1em]",
         "rounded-lg bg-stone-100 shadow-sm/100 text-black leading-[1.1] kai",
@@ -178,18 +179,19 @@ defmodule MkapsWeb.BoardLive do
       phx-hook="Touchable" id={"sentence-#{i}"}
       style={get_sentence_style(@transforms, @auto_transforms, "sentence-#{i}")}>
       <span :for={{{grapheme_group, deco}, j} <- Enum.with_index(grapheme_groups(sentence))}
-        class="whitespace-nowrap inline-block">
+        class={["whitespace-nowrap", deco == "inline-block" && "inline-block"]}>
         <span :for={{grapheme, k} <- Enum.with_index(grapheme_group)}
+          :if={grapheme != " "}
           phx-hook="Touchable" id={"#{@slide_id}-#{i}-#{j}-#{k}"}
           class={["inline-block mkaps-grapheme",
             "#{@slide_id}-#{i}-#{j}-#{k}" in @highlights && "text-violet-900 bg-violet-200",
             "#{@slide_id}-#{i}-#{j}-#{k-1}" not in @highlights && "rounded-l-md",
             "#{@slide_id}-#{i}-#{j}-#{k+1}" not in @highlights && "rounded-r-md",
             deco == "underline" && "underline underline-offset-[0.15em]"]}>
-          {if grapheme == " ", do: raw("&nbsp;"), else: grapheme}
+          {grapheme}
         </span>
       </span>
-    </span>
+    </div>
     """
   end
 
@@ -361,7 +363,7 @@ defmodule MkapsWeb.BoardLive do
       <.link class="btn btn-circle btn-outline" patch={~p"/lessons/#{@lesson.id}/slides/#{@slide_position+1}"}>&gt;</.link>
     </div>
     <div class="fixed z-9999 bottom-0 left-0 flex flex-col">
-      <.show_avatar_ui :if={@slide && @slide.avatars && @focus_id} avatars={@slide.avatars} focus_id={@focus_id} />
+      <.show_avatar_ui :if={@slide && String.starts_with?(@focus_id || "", "avatar-")} avatars={@slide.avatars} focus_id={@focus_id} />
       <.show_save_transforms :if={@slide && @slide.transforms} transforms_state={@transforms_state} transforms={@slide.transforms} />
       <.show_toggle_background_gestures toggle_scroll={@toggle_scroll} toggle_sentences={@toggle_sentences} toggle_images={@toggle_images} />
       <.show_toggle_gestures toggle_pan={@toggle_pan} toggle_zoom={@toggle_zoom} toggle_rotate={@toggle_rotate} />
@@ -720,7 +722,7 @@ defmodule MkapsWeb.BoardLive do
 
   defp get_avatar_name_size(active_transforms, auto_transforms, id) do
     [_,_,_,px] = Map.get(active_transforms, id, Map.get(auto_transforms, id))
-    "font-size:#{trunc(px / 10)}px"
+    "font-size:#{trunc(px / 8)}px"
   end
 
   defp get_avatar_badge_size(active_transforms, auto_transforms, id) do
@@ -823,12 +825,24 @@ defmodule MkapsWeb.BoardLive do
     parse_grapheme_groups(remaining, [{group, nil} | acc])
   end
 
+  defp parse_grapheme_groups([char , "。" | rest], acc) do
+    parse_grapheme_groups(rest, [{[char, "。"], "inline-block"} | acc])
+  end
+
+  defp parse_grapheme_groups([char , "，" | rest], acc) do
+    parse_grapheme_groups(rest, [{[char, "，"], "inline-block"} | acc])
+  end
+
+  defp parse_grapheme_groups([char , "？" | rest], acc) do
+    parse_grapheme_groups(rest, [{[char, "？"], "inline-block"} | acc])
+  end
+
   defp parse_grapheme_groups([char | rest], acc) do
     if is_ascii_letter_or_digit(char) do
       {group, remaining} = collect_while([char | rest], &is_ascii_letter_or_digit/1, [])
       parse_grapheme_groups(remaining, [{group, nil} | acc])
     else
-      parse_grapheme_groups(rest, [{[char], nil} | acc])
+      parse_grapheme_groups(rest, [{[char], "inline-block"} | acc])
     end
   end
 
@@ -846,6 +860,6 @@ defmodule MkapsWeb.BoardLive do
   end
 
   defp is_ascii_letter_or_digit(char) do
-    char =~ ~r/^[A-Za-z0-9]$/
+    char =~ ~r/^[A-Za-z0-9,\."']$/
   end
 end
