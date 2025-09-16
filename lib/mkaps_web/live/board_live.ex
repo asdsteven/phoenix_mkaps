@@ -52,7 +52,7 @@ defmodule MkapsWeb.BoardLive do
      |> assign(lesson: lesson)
      |> assign(slide: slide)
      |> assign(slide_position: position)
-     |> assign(auto_transforms: slide && auto_transform(slide))
+     |> assign(auto_transforms: slide && auto_transform(slide, "top-bottom"))
      |> assign(transforms_state: :pending)
      |> assign(focus_id: nil)}
   end
@@ -266,7 +266,7 @@ defmodule MkapsWeb.BoardLive do
       <%= if @transforms_state == :pending do %>
       <button class="join-item btn btn-sm kai btn-outline" phx-click="save-transforms">存</button>
       <button class="join-item btn btn-sm kai btn-outline" phx-click="apply-transforms">用</button>
-      <button class="join-item btn btn-sm kai btn-outline" phx-click="clear-transforms" disabled={not Map.has_key?(@transforms, "")}>清</button>
+      <button class="join-item btn btn-sm kai btn-outline" phx-click="preset-transforms">版</button>
       <% end %>
       <%= if @transforms_state == :save do %>
       <button class="join-item btn btn-sm kai btn-outline" phx-click="cancel-transforms">取消</button>
@@ -281,6 +281,13 @@ defmodule MkapsWeb.BoardLive do
         phx-click="apply-transforms" phx-value-slot="1" disabled={not Map.has_key?(@transforms, "1")}>應用位置表一</button>
       <button class="join-item btn btn-sm kai btn-outline"
         phx-click="apply-transforms" phx-value-slot="2" disabled={not Map.has_key?(@transforms, "2")}>應用位置表二</button>
+      <% end %>
+      <%= if @transforms_state == :preset do %>
+      <button class="join-item btn btn-sm kai btn-outline" phx-click="cancel-transforms">取消</button>
+      <button class="join-item btn btn-sm kai btn-outline" phx-click="preset-transforms" phx-value-layout="left-right">左圖右字</button>
+      <button class="join-item btn btn-sm kai btn-outline" phx-click="preset-transforms" phx-value-layout="right-left">左字右圖</button>
+      <button class="join-item btn btn-sm kai btn-outline" phx-click="preset-transforms" phx-value-layout="top-bottom">上圖下字</button>
+      <button class="join-item btn btn-sm kai btn-outline" phx-click="preset-transforms" phx-value-layout="bottom-top">上字下圖</button>
       <% end %>
     </div>
     """
@@ -470,7 +477,7 @@ defmodule MkapsWeb.BoardLive do
     end)
     {:noreply,
      socket
-     |> assign(progress: 0, upload_images: get_uploaded_images())}
+     |> assign(progress: 0, uploaded_images: get_uploaded_images())}
   end
 
   def handle_event("toggle-scroll", _params, socket) do
@@ -548,6 +555,22 @@ defmodule MkapsWeb.BoardLive do
     {:noreply, assign(socket, transforms_state: :apply)}
   end
 
+  def handle_event("preset-transforms", %{"layout" => layout}, socket) do
+    preset_transforms = auto_transform(socket.assigns.slide, layout)
+    transforms = Map.put(socket.assigns.slide.transforms, "", preset_transforms)
+    slide = socket.assigns.slide |> Slide.changeset(%{transforms: transforms}) |> Repo.update!
+    {:noreply,
+     socket
+     |> update(:lesson, &update_lesson_slide(&1, slide))
+     |> assign(slide: slide)
+     |> assign(transforms_state: :pending)}
+  end
+
+  def handle_event("preset-transforms", _params, socket) do
+    {:noreply, assign(socket, transforms_state: :preset)}
+  end
+
+  # Legacy
   def handle_event("clear-transforms", _params, socket) do
     transforms = Map.delete(socket.assigns.slide.transforms, "")
     slide = socket.assigns.slide |> Slide.changeset(%{transforms: transforms}) |> Repo.update!
@@ -732,7 +755,7 @@ defmodule MkapsWeb.BoardLive do
 
   defp is_word?(s), do: String.length(s) <= 4 or not String.contains?(s, [" ", ".", "?","。","？"])
 
-  defp even_per_row(n) do
+  defp vertical_per_row(n) do
     cond do
       n <= 3 -> 3
       n <= 5 -> n
@@ -741,17 +764,41 @@ defmodule MkapsWeb.BoardLive do
       n <= 28 -> Float.ceil(n / 4)
       true -> Float.ceil(n / 5)
     end
-    |> trunc
+    |> round
   end
 
-  defp auto_transform(slide) do
-    sentences = String.split(slide.sentences || "", "\n")
-    images = String.split(slide.images || "", "\n")
-    avatars = String.split(Map.get(slide.avatars || %{}, "names", ""), "\n")
+  defp horizontal_per_row(n) do
+    cond do
+      n <= 3 -> 1
+      n <= 10 -> 2
+      n <= 18 -> 3
+      n <= 28 -> 4
+      true -> 5
+    end
+    |> round
+  end
+
+  defp auto_transform(slide, layout) do
+    case layout do
+      "top-bottom" -> auto_transform_vertical(slide, layout)
+      "bottom-top" -> auto_transform_vertical(slide, layout)
+      "left-right" -> auto_transform_horizontal(slide, layout)
+      "right-left" -> auto_transform_horizontal(slide, layout)
+    end
+  end
+
+  defp ignore_empty([""]), do: []
+  defp ignore_empty(s), do: s
+
+  defp auto_transform_vertical(slide, layout) do
+    sentences = ignore_empty(String.split(slide.sentences || "", "\n"))
+    images = ignore_empty(String.split(slide.images || "", "\n"))
+    avatars = ignore_empty(String.split(Map.get(slide.avatars || %{}, "names", ""), "\n"))
+
     words_per_row = 5
-    images_per_row = even_per_row(length(images))
-    IO.inspect(images_per_row)
-    avatars_per_row = even_per_row(length(avatars))
+    images_per_row = vertical_per_row(length(images))
+    avatars_per_row = vertical_per_row(length(avatars))
+
     sentence_rows = Enum.sum_by(Enum.chunk_by(sentences, &is_word?/1), fn [e | rest] ->
       if is_word?(e) do
         Float.ceil(length([e | rest]) / words_per_row)
@@ -760,16 +807,67 @@ defmodule MkapsWeb.BoardLive do
       end
     end)
     image_rows = Float.ceil(length(images) / images_per_row)
-    avatar_rows = Float.ceil(length(images) / images_per_row)
-    dy = Enum.min([100, (720 - 100) / (sentence_rows + image_rows + avatar_rows)])
-    %{}
-    |> Map.merge(auto_transform_sentences(sentences, dy, words_per_row))
-    |> Map.merge(auto_transform_images(images, sentence_rows * dy, dy, images_per_row, length(sentences)+1))
-    |> Map.merge(auto_transform_avatars(avatars, (sentence_rows + image_rows) * dy, dy, avatars_per_row, length(sentences)+length(images)+1))
+    avatar_rows = Float.ceil(length(avatars) / avatars_per_row)
+
+    factor = (1280 - 200) / images_per_row / 100
+    dy = Enum.min([100, (720 - 100) / (sentence_rows + image_rows * factor + avatar_rows)])
+    case layout do
+      "top-bottom" ->
+        %{}
+        |> Map.merge(auto_transform_images(images, images_per_row, image_rows, 1, {100, 0}, {1280 - 200, image_rows * factor * dy}))
+        |> Map.merge(auto_transform_sentences(sentences, words_per_row, sentence_rows, length(images)+1, {100, image_rows * factor * dy}, {1280 - 200, sentence_rows * dy}))
+        |> Map.merge(auto_transform_avatars(avatars, avatars_per_row, avatar_rows, length(sentences)+length(images)+1, {100, (sentence_rows + image_rows * factor) * dy}, {1280 - 200, avatar_rows * dy}))
+      "bottom-top" ->
+        %{}
+        |> Map.merge(auto_transform_sentences(sentences, words_per_row, sentence_rows, 1, {100, 0}, {1280 - 200, sentence_rows * dy}))
+        |> Map.merge(auto_transform_images(images, images_per_row, image_rows, length(sentences)+1, {100, sentence_rows * dy}, {1280 - 200, image_rows * factor * dy}))
+        |> Map.merge(auto_transform_avatars(avatars, avatars_per_row, avatar_rows, length(sentences)+length(images)+1, {100, (sentence_rows + image_rows * factor) * dy}, {1280 - 200, avatar_rows * dy}))
+    end
   end
 
-  defp auto_transform_sentences(sentences, dy, words_per_row) do
-    dx = (1280 - 200) / words_per_row
+  defp auto_transform_horizontal(slide, layout) do
+    sentences = ignore_empty(String.split(slide.sentences || "", "\n"))
+    images = ignore_empty(String.split(slide.images || "", "\n"))
+    avatars = ignore_empty(String.split(Map.get(slide.avatars || %{}, "names", ""), "\n"))
+
+    words_per_row = 3
+    images_per_row = horizontal_per_row(length(images))
+    avatars_per_row = horizontal_per_row(length(avatars))
+
+    sentence_rows = Enum.sum_by(Enum.chunk_by(sentences, &is_word?/1), fn [e | rest] ->
+      if is_word?(e) do
+        Float.ceil(length([e | rest]) / words_per_row)
+      else
+        length([e | rest]) # one sentence per row
+      end
+    end)
+    image_rows = Float.ceil(length(images) / images_per_row)
+    avatar_rows = Float.ceil(length(avatars) / avatars_per_row)
+
+    sentences_factor = if length(sentences) == 0, do: 0, else: 400
+    images_factor = if length(images) == 0, do: 0, else: 200 * images_per_row
+    avatars_factor = if length(avatars) == 0, do: 0, else: 100 * avatars_per_row
+    sum_factors = sentences_factor + images_factor + avatars_factor
+    sentences_wh = {1280 / sum_factors * sentences_factor, 720 - 100}
+    images_wh = {1280 / sum_factors * images_factor, 720 - 100}
+    avatars_wh = {1280 / sum_factors * avatars_factor, 720 - 100}
+    case layout do
+      "left-right" ->
+        %{}
+        |> Map.merge(auto_transform_images(images, images_per_row, image_rows, 1, {0, 0}, images_wh))
+        |> Map.merge(auto_transform_sentences(sentences, words_per_row, sentence_rows, length(images)+1, {1280 / sum_factors * images_factor, 0}, sentences_wh))
+        |> Map.merge(auto_transform_avatars(avatars, avatars_per_row, avatar_rows, length(sentences)+length(images)+1, {1280 / sum_factors * (images_factor + sentences_factor), 0}, avatars_wh))
+      "right-left" ->
+        %{}
+        |> Map.merge(auto_transform_sentences(sentences, words_per_row, sentence_rows, 1, {0, 0}, sentences_wh))
+        |> Map.merge(auto_transform_images(images, images_per_row, image_rows, length(sentences)+1, {1280 / sum_factors * sentences_factor, 0}, images_wh))
+        |> Map.merge(auto_transform_avatars(avatars, avatars_per_row, avatar_rows, length(sentences)+length(images)+1, {1280 / sum_factors * (images_factor + sentences_factor), 0}, avatars_wh))
+    end
+  end
+
+  defp auto_transform_sentences([], _, _, _, _, _), do: %{}
+  defp auto_transform_sentences(sentences, words_per_row, sentence_rows, begin_z, {begin_x, begin_y}, {w, h}) do
+    {dx, dy} = {w / words_per_row, h / sentence_rows}
     separate = Enum.concat(Enum.map(Enum.chunk_by(sentences, &is_word?/1), fn [e | rest] ->
       if is_word?(e) do
         Enum.chunk_every([e | rest], words_per_row)
@@ -780,30 +878,32 @@ defmodule MkapsWeb.BoardLive do
     l = Enum.concat(Enum.with_index(separate, fn [e | rest], y ->
       if is_word?(e) do
         Enum.with_index([e | rest], fn _word, x ->
-          [100 + round(x * dx), round(y * dy), 0, 48]
+          [round(begin_x + x * dx), round(begin_y + y * dy), 0, 48]
         end)
       else
-        [[100, round(y * dy), 0, 60]]
+        [[begin_x, round(begin_y + y * dy), 0, 60]]
       end
     end))
-    Map.new(Enum.with_index(l, fn [x,y,_,px], i -> {"sentence-#{i}", [x,y,1+i,px]} end))
+    Map.new(Enum.with_index(l, fn [x,y,_,px], i -> {"sentence-#{i}", [x,y,begin_z+i,px]} end))
   end
 
-  defp auto_transform_images(images, begin_y, dy, images_per_row, begin_z) do
-    dx = (1280 - 200) / images_per_row
+  defp auto_transform_images([], _, _, _, _, _), do: %{}
+  defp auto_transform_images(images, images_per_row, image_rows, begin_z, {begin_x, begin_y}, {w, h}) do
+    {dx, dy} = {w / images_per_row, h / image_rows}
     l = Enum.concat(Enum.with_index(Enum.chunk_every(images, images_per_row), fn row, y ->
       Enum.with_index(row, fn _image, x ->
-        [100 + round(x * dx), round(begin_y + y * dy), 0, dx]
+        [round(begin_x + x * dx), round(begin_y + y * dy), 0, dx]
       end)
     end))
     Map.new(Enum.with_index(l, fn [x,y,_,px], i -> {"image-#{i}", [x,y,begin_z+i,px]} end))
   end
 
-  defp auto_transform_avatars(avatars, begin_y, dy, avatars_per_row, begin_z) do
-    dx = (1280 - 200) / avatars_per_row
+  defp auto_transform_avatars([], _, _, _, _, _), do: %{}
+  defp auto_transform_avatars(avatars, avatars_per_row, avatar_rows, begin_z, {begin_x, begin_y}, {w, h}) do
+    {dx, dy} = {w / avatars_per_row, h / avatar_rows}
     l = Enum.concat(Enum.with_index(Enum.chunk_every(avatars, avatars_per_row), fn row, y ->
       Enum.with_index(row, fn _avatar, x ->
-        [100 + round(x * dx), round(begin_y + y * dy), 0, dx]
+        [round(begin_x + x * dx), round(begin_y + y * dy), 0, dx]
       end)
     end))
     Map.new(Enum.with_index(l, fn [x,y,_,px], i -> {"avatar-#{i}", [x,y,begin_z+i,px]} end))
