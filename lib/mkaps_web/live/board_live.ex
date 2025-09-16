@@ -20,6 +20,13 @@ defmodule MkapsWeb.BoardLive do
                      progress: fn :image, entry, socket -> {:noreply, assign(socket, progress: entry.progress)} end)}
   end
 
+  def handle_info(slide, socket) do
+    {:noreply,
+     socket
+     |> update(:lesson, &update_lesson_slide(&1, slide))
+     |> assign(slide: slide)}
+  end
+
   def handle_params(_params, _uri, socket)
       when socket.assigns.live_action == :index do
     {:noreply,
@@ -47,6 +54,14 @@ defmodule MkapsWeb.BoardLive do
         _ -> Lesson |> preload(:slides) |> Repo.get!(id)
       end
     slide = Enum.find(lesson.slides, &(&1.position == position))
+    case socket.assigns[:slide] do
+      nil -> Phoenix.PubSub.subscribe(Mkaps.PubSub, "slide:#{slide.id}")
+      prev_slide ->
+        if prev_slide.id != slide.id do
+          Phoenix.PubSub.unsubscribe(Mkaps.PubSub, "slide:#{prev_slide.id}")
+          Phoenix.PubSub.subscribe(Mkaps.PubSub, "slide:#{slide.id}")
+        end
+    end
     {:noreply,
      socket
      |> assign(lesson: lesson)
@@ -150,7 +165,7 @@ defmodule MkapsWeb.BoardLive do
     <form phx-submit="submit-image" phx-change="change-image" class="m-2">
       <.live_file_input upload={@uploads.image} class="file-input file-input-primary" />
       <button type="submit">Upload</button>
-      <div>{@progress}</div>
+      <span>{@progress}%</span>
     </form>
     <div>Click one of them to copy image link</div>
     <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
@@ -529,6 +544,7 @@ defmodule MkapsWeb.BoardLive do
         Map.delete(socket.assigns.slide.transforms, slot)
       end
     slide = socket.assigns.slide |> Slide.changeset(%{transforms: transforms}) |> Repo.update!
+    Phoenix.PubSub.broadcast_from(Mkaps.PubSub, self(), "slide:#{slide.id}", slide)
     {:noreply,
      socket
      |> update(:lesson, &update_lesson_slide(&1, slide))
@@ -544,6 +560,7 @@ defmodule MkapsWeb.BoardLive do
     slot_transforms = Map.get(socket.assigns.slide.transforms, slot)
     transforms = Map.put(socket.assigns.slide.transforms, "", slot_transforms)
     slide = socket.assigns.slide |> Slide.changeset(%{transforms: transforms}) |> Repo.update!
+    Phoenix.PubSub.broadcast_from(Mkaps.PubSub, self(), "slide:#{slide.id}", slide)
     {:noreply,
      socket
      |> update(:lesson, &update_lesson_slide(&1, slide))
@@ -559,6 +576,7 @@ defmodule MkapsWeb.BoardLive do
     preset_transforms = auto_transform(socket.assigns.slide, layout)
     transforms = Map.put(socket.assigns.slide.transforms, "", preset_transforms)
     slide = socket.assigns.slide |> Slide.changeset(%{transforms: transforms}) |> Repo.update!
+    Phoenix.PubSub.broadcast_from(Mkaps.PubSub, self(), "slide:#{slide.id}", slide)
     {:noreply,
      socket
      |> update(:lesson, &update_lesson_slide(&1, slide))
@@ -574,6 +592,7 @@ defmodule MkapsWeb.BoardLive do
   def handle_event("clear-transforms", _params, socket) do
     transforms = Map.delete(socket.assigns.slide.transforms, "")
     slide = socket.assigns.slide |> Slide.changeset(%{transforms: transforms}) |> Repo.update!
+    Phoenix.PubSub.broadcast_from(Mkaps.PubSub, self(), "slide:#{slide.id}", slide)
     {:noreply,
      socket
      |> update(:lesson, &update_lesson_slide(&1, slide))
@@ -608,6 +627,7 @@ defmodule MkapsWeb.BoardLive do
     transforms = Map.put(socket.assigns.slide.transforms || %{}, "", new_active_transforms)
     slide = socket.assigns.slide |> Slide.changeset(%{transforms: transforms}) |> Repo.update!
     focus_id = Map.get(Enum.at(drags, 0), "item")
+    Phoenix.PubSub.broadcast_from(Mkaps.PubSub, self(), "slide:#{slide.id}", slide)
     {:noreply,
      socket
      |> update(:lesson, &update_lesson_slide(&1, slide))
@@ -651,6 +671,7 @@ defmodule MkapsWeb.BoardLive do
     new_avatar = Map.update(avatar || %{}, "badges", [badge], &([badge | &1]))
     avatars = Map.put(socket.assigns.slide.avatars || %{}, socket.assigns.focus_id, new_avatar)
     slide = socket.assigns.slide |> Slide.changeset(%{avatars: avatars}) |> Repo.update!
+    Phoenix.PubSub.broadcast_from(Mkaps.PubSub, self(), "slide:#{slide.id}", slide)
     {:noreply,
      socket
      |> update(:lesson, &update_lesson_slide(&1, slide))
@@ -667,6 +688,7 @@ defmodule MkapsWeb.BoardLive do
     end)
     avatars = Map.put(socket.assigns.slide.avatars || %{}, socket.assigns.focus_id, new_avatar)
     slide = socket.assigns.slide |> Slide.changeset(%{avatars: avatars}) |> Repo.update!
+    Phoenix.PubSub.broadcast_from(Mkaps.PubSub, self(), "slide:#{slide.id}", slide)
     {:noreply,
      socket
      |> update(:lesson, &update_lesson_slide(&1, slide))
@@ -678,6 +700,7 @@ defmodule MkapsWeb.BoardLive do
     new_avatar = Map.update(avatar || %{}, "hue", 150, &(rem(&1 + 330, 360)))
     avatars = Map.put(socket.assigns.slide.avatars || %{}, socket.assigns.focus_id, new_avatar)
     slide = socket.assigns.slide |> Slide.changeset(%{avatars: avatars}) |> Repo.update!
+    Phoenix.PubSub.broadcast_from(Mkaps.PubSub, self(), "slide:#{slide.id}", slide)
     {:noreply,
      socket
      |> update(:lesson, &update_lesson_slide(&1, slide))
@@ -689,6 +712,7 @@ defmodule MkapsWeb.BoardLive do
     new_avatar = Map.update(avatar || %{}, "hue", 210, &(rem(&1 + 30, 360)))
     avatars = Map.put(socket.assigns.slide.avatars || %{}, socket.assigns.focus_id, new_avatar)
     slide = socket.assigns.slide |> Slide.changeset(%{avatars: avatars}) |> Repo.update!
+    Phoenix.PubSub.broadcast_from(Mkaps.PubSub, self(), "slide:#{slide.id}", slide)
     {:noreply,
      socket
      |> update(:lesson, &update_lesson_slide(&1, slide))

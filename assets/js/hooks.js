@@ -2,7 +2,6 @@ const Hooks = {}
 
 const draggings = new Set()
 let ticker = 1
-let boardDragging = false
 
 const getSize = (el) => {
   if (el.matches('.mkaps-sentence')) return parseInt(el.style.fontSize, 10)
@@ -68,6 +67,7 @@ Hooks.Touchable = {
   mounted() {
     const el = this.el
     let myTicker = 1
+    let timeout = null
 
     if (el.matches('img')) {
       el.addEventListener('contextmenu', (e) => {
@@ -150,31 +150,36 @@ Hooks.Touchable = {
         if (el.id == 'board') {
           const events = persistent(el)
           if (events.length > 0) this.pushEvent('drags', events)
-          boardDragging = false
         } else if (draggings.has(el)) {
           draggings.delete(el)
           this.pushEvent('drags', sink(el))
         }
+        clearTimeout(timeout)
+        timeout = null
       } else  {
         // is State 3
         if (el.id == 'board') {
           pointers.splice(i, 1)
-          pointers[0].originX = pointers[0].x
-          pointers[0].originY = pointers[0].y
-          pointers[0].origins.clear()
-          setAllOrigins(pointers[0].origins)
+          const p = pointers[0]
+          p.originX = p.x
+          p.originY = p.y
+          p.origins.clear()
+          setAllOrigins(p.origins)
           const events = persistent(el)
           if (events.length > 0) this.pushEvent('drags', events)
         } else {
           pointers.splice(i, 1)
-          pointers[0].originX = pointers[0].x
-          pointers[0].originY = pointers[0].y
-          pointers[0].elX = parseInt(el.style.left, 10)
-          pointers[0].elY = parseInt(el.style.top, 10)
-          pointers[0].elZ = parseInt(el.style.zIndex, 10)
-          pointers[0].elSize = getSize(el)
+          const p = pointers[0]
+          p.originX = p.x
+          p.originY = p.y
+          p.elX = parseInt(el.style.left, 10)
+          p.elY = parseInt(el.style.top, 10)
+          p.elZ = parseInt(el.style.zIndex, 10)
+          p.elSize = getSize(el)
           this.pushEvent('drags', [xyzSize(el)])
         }
+        clearTimeout(timeout)
+        timeout = null
       }
     }
     window.addEventListener('pointerup', pointerend)
@@ -184,7 +189,6 @@ Hooks.Touchable = {
       // is State 2
       const p = pointers[0]
       if (el.id == 'board') {
-        boardDragging = true
         if (draggings.size > 0) {
           // invalidate all other pointers
           myTicker = ++ticker
@@ -265,6 +269,55 @@ Hooks.Touchable = {
       }
     }
 
+    const commit = () => {
+      if (!timeout) return
+      timeout = null
+      if (pointers.length == 1) {
+        const p = pointers[0]
+        // is State 2
+        if (el.id == 'board') {
+          p.originX = p.x
+          p.originY = p.y
+          p.origins = new Map()
+          setAllOrigins(p.origins)
+          const events = persistent(el)
+          if (events.length > 0) this.pushEvent('drags', events)
+        } else if (draggings.has(el)) {
+          p.originX = p.x
+          p.originY = p.y
+          p.elX = parseInt(el.style.left, 10)
+          p.elY = parseInt(el.style.top, 10)
+          p.elZ = parseInt(el.style.zIndex, 10)
+          p.elSize = getSize(el)
+          this.pushEvent('drags', [xyzSize(el)])
+        }
+      } else  {
+        const p = pointers[0]
+        const q = pointers[1]
+        // is State 3
+        if (el.id == 'board') {
+          p.originX = p.x
+          p.originY = p.y
+          p.origins = new Map()
+          setAllOrigins(p.origins)
+          q.originX = q.x
+          q.originY = q.y
+          const events = persistent(el)
+          if (events.length > 0) this.pushEvent('drags', events)
+        } else {
+          p.originX = p.x
+          p.originY = p.y
+          p.elX = parseInt(el.style.left, 10)
+          p.elY = parseInt(el.style.top, 10)
+          p.elZ = parseInt(el.style.zIndex, 10)
+          p.elSize = getSize(el)
+          q.originX = q.x
+          q.originY = q.y
+          this.pushEvent('drags', [xyzSize(el)])
+        }
+      }
+    }
+
     window.addEventListener('pointermove', (e) => {
       // invalidate pointers
       if (myTicker != ticker) {
@@ -318,6 +371,7 @@ Hooks.Touchable = {
       } else {
         multiTouch()
       }
+      if (!timeout) timeout = setTimeout(commit, 100)
     })
   }
 }
