@@ -203,6 +203,9 @@ defmodule MkapsWeb.BoardLive do
           deco == "橙" && "px-[0.3em] py-[0.1em] inline-block rounded-full text-orange-900 bg-orange-400",
           deco == "黃" && "px-[0.3em] py-[0.1em] inline-block rounded-full text-amber-900 bg-amber-400",
           deco == "灰" && "px-[0.3em] py-[0.1em] inline-block rounded-full text-zinc-900 bg-zinc-400"]}>
+        <%= if deco == "網" do %>
+        <a class="link link-primary" target="_blank" href={Enum.join(grapheme_group)}>{Enum.join(grapheme_group)}</a>
+        <% else %>
         <span :for={{grapheme, k} <- Enum.with_index(grapheme_group)}
           :if={grapheme != " "}
           phx-hook="Touchable" id={"#{@slide_id}-#{@i}-#{j+k}"}
@@ -213,6 +216,7 @@ defmodule MkapsWeb.BoardLive do
             deco == "underline" && "underline underline-offset-[0.15em]"]}>
           {grapheme}
         </span>
+        <% end %>
       </span>
     </div>
     """
@@ -799,10 +803,9 @@ defmodule MkapsWeb.BoardLive do
     "font-size:#{trunc(px / 12)}px"
   end
 
-  defp get_sole_deco([{_groups, deco, _j}]), do: deco
-  defp get_sole_deco(_), do: nil
   defp is_plain_text?([{_groups, nil, _j}]), do: true
   defp is_plain_text?([{_groups, "underline", _j}]), do: true
+  defp is_plain_text?([{_groups, "網", _j}]), do: true
   defp is_plain_text?([{_groups, _deco, _j}]), do: false
   defp is_plain_text?(_groups), do: true
   defp is_word?(s), do: String.length(s) <= 4 or not String.contains?(s, [" ", ".", "?","。","？"])
