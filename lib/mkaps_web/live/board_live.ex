@@ -179,6 +179,45 @@ defmodule MkapsWeb.BoardLive do
     """
   end
 
+  attr :i, :integer, required: true
+  attr :transforms, :map, required: true
+  attr :auto_transforms, :map, required: true
+  attr :slide_id, :integer, required: true
+  attr :highlights, :map, required: true
+  attr :groups, :list, required: true
+  defp show_sentence(assigns) do
+    ~H"""
+    <div class={["absolute w-max max-w-[1080px] px-[0.4em] py-[0.1em]",
+      "text-black leading-[1.1] kai",
+      "mkaps-sentence mkaps-drag",
+      is_plain_text?(@groups) && "rounded-lg bg-stone-100 shadow-sm/100"]}
+      phx-hook="Touchable" id={"sentence-#{@i}"}
+      style={get_sentence_style(@transforms, @auto_transforms, "sentence-#{@i}")}>
+      <span :for={{grapheme_group, deco, j} <- @groups}
+        class={["whitespace-nowrap",
+          deco == "inline-block" && "inline-block",
+          deco == "紅" && "px-[0.3em] py-[0.1em] inline-block rounded-full text-pink-900 bg-pink-400",
+          deco == "藍" && "px-[0.3em] py-[0.1em] inline-block rounded-full text-blue-900 bg-blue-400",
+          deco == "綠" && "px-[0.3em] py-[0.1em] inline-block rounded-full text-green-900 bg-green-400",
+          deco == "紫" && "px-[0.3em] py-[0.1em] inline-block rounded-full text-purple-900 bg-purple-400",
+          deco == "橙" && "px-[0.3em] py-[0.1em] inline-block rounded-full text-orange-900 bg-orange-400",
+          deco == "黃" && "px-[0.3em] py-[0.1em] inline-block rounded-full text-amber-900 bg-amber-400",
+          deco == "灰" && "px-[0.3em] py-[0.1em] inline-block rounded-full text-zinc-900 bg-zinc-400"]}>
+        <span :for={{grapheme, k} <- Enum.with_index(grapheme_group)}
+          :if={grapheme != " "}
+          phx-hook="Touchable" id={"#{@slide_id}-#{@i}-#{j+k}"}
+          class={["inline-block mkaps-grapheme",
+            "#{@slide_id}-#{@i}-#{j+k}" in @highlights && "text-violet-900 bg-violet-200",
+            "#{@slide_id}-#{@i}-#{j+k-1}" not in @highlights && "rounded-l-md",
+            "#{@slide_id}-#{@i}-#{j+k+1}" not in @highlights && "rounded-r-md",
+            deco == "underline" && "underline underline-offset-[0.15em]"]}>
+          {grapheme}
+        </span>
+      </span>
+    </div>
+    """
+  end
+
   attr :sentences, :string, required: true
   attr :transforms, :map, required: true
   attr :auto_transforms, :map, required: true
@@ -186,27 +225,10 @@ defmodule MkapsWeb.BoardLive do
   attr :highlights, :map, required: true
   defp show_sentences(assigns) do
     ~H"""
-    <div :for={{sentence, i} <- Enum.with_index(String.split(@sentences, "\n"))}
-      :if={sentence != ""}
-      class={["absolute w-max max-w-[1080px] px-[0.4em] py-[0.1em]",
-        "rounded-lg bg-stone-100 shadow-sm/100 text-black leading-[1.1] kai",
-        "mkaps-sentence mkaps-drag"]}
-      phx-hook="Touchable" id={"sentence-#{i}"}
-      style={get_sentence_style(@transforms, @auto_transforms, "sentence-#{i}")}>
-      <span :for={{{grapheme_group, deco}, j} <- Enum.with_index(grapheme_groups(sentence))}
-        class={["whitespace-nowrap", deco == "inline-block" && "inline-block"]}>
-        <span :for={{grapheme, k} <- Enum.with_index(grapheme_group)}
-          :if={grapheme != " "}
-          phx-hook="Touchable" id={"#{@slide_id}-#{i}-#{j}-#{k}"}
-          class={["inline-block mkaps-grapheme",
-            "#{@slide_id}-#{i}-#{j}-#{k}" in @highlights && "text-violet-900 bg-violet-200",
-            "#{@slide_id}-#{i}-#{j}-#{k-1}" not in @highlights && "rounded-l-md",
-            "#{@slide_id}-#{i}-#{j}-#{k+1}" not in @highlights && "rounded-r-md",
-            deco == "underline" && "underline underline-offset-[0.15em]"]}>
-          {grapheme}
-        </span>
-      </span>
-    </div>
+    <.show_sentence :for={{sentence, i} <- Enum.with_index(String.split(@sentences, "\n"))}
+      :if={sentence != ""} i={i}
+      transforms={@transforms} auto_transforms={@auto_transforms}
+      slide_id={@slide_id} highlights={@highlights} groups={with_grapheme_index(grapheme_groups(sentence))} />
     """
   end
 
@@ -641,17 +663,17 @@ defmodule MkapsWeb.BoardLive do
   end
 
   def handle_event("toggle-highlight", %{"key" => key}, socket) do
-    [slide_id, i, j, _k] = String.split(key, "-")
+    [slide_id, i, jk] = String.split(key, "-")
     sentence = Enum.at(String.split(socket.assigns.slide.sentences, "\n"), String.to_integer(i))
-    {group, _deco} = Enum.at(grapheme_groups(sentence), String.to_integer(j))
+    {group, _deco, j} = Enum.find(with_grapheme_index(grapheme_groups(sentence)), fn {group,_,j} -> String.to_integer(jk) < j+length(group) end)
     indices = 0..(length(group)-1)
-    highlight_count = Enum.count(indices, fn k -> "#{slide_id}-#{i}-#{j}-#{k}" in socket.assigns.highlights end)
+    highlight_count = Enum.count(indices, fn k -> "#{slide_id}-#{i}-#{j+k}" in socket.assigns.highlights end)
     highlights =
       if highlight_count >= 2 and highlight_count == length(group) do
-        MapSet.put(Enum.reduce(indices, socket.assigns.highlights, &MapSet.delete(&2, "#{slide_id}-#{i}-#{j}-#{&1}")), key)
+        MapSet.put(Enum.reduce(indices, socket.assigns.highlights, &MapSet.delete(&2, "#{slide_id}-#{i}-#{j+&1}")), key)
       else
         if highlight_count == 0 do
-          Enum.reduce(indices, socket.assigns.highlights, &MapSet.put(&2, "#{slide_id}-#{i}-#{j}-#{&1}"))
+          Enum.reduce(indices, socket.assigns.highlights, &MapSet.put(&2, "#{slide_id}-#{i}-#{j+&1}"))
         else
           if key in socket.assigns.highlights do
             MapSet.delete(socket.assigns.highlights, key)
@@ -777,6 +799,12 @@ defmodule MkapsWeb.BoardLive do
     "font-size:#{trunc(px / 12)}px"
   end
 
+  defp get_sole_deco([{_groups, deco, _j}]), do: deco
+  defp get_sole_deco(_), do: nil
+  defp is_plain_text?([{_groups, nil, _j}]), do: true
+  defp is_plain_text?([{_groups, "underline", _j}]), do: true
+  defp is_plain_text?([{_groups, _deco, _j}]), do: false
+  defp is_plain_text?(_groups), do: true
   defp is_word?(s), do: String.length(s) <= 4 or not String.contains?(s, [" ", ".", "?","。","？"])
 
   defp vertical_per_row(n) do
@@ -933,6 +961,17 @@ defmodule MkapsWeb.BoardLive do
     Map.new(Enum.with_index(l, fn [x,y,_,px], i -> {"avatar-#{i}", [x,y,begin_z+i,px]} end))
   end
 
+  defp with_grapheme_index(s) do
+    s
+    |> Enum.reduce([], fn {group, deco}, list ->
+      case list do
+        [] -> [{group, deco, 0}]
+        [{prev_group, prev_deco, i} | rest] -> [{group, deco, i + length(prev_group)}, {prev_group, prev_deco, i} | rest]
+      end
+    end)
+    |> Enum.reverse
+  end
+
   defp grapheme_groups(s) do
     parse_grapheme_groups(String.graphemes(s), [])
   end
@@ -940,13 +979,13 @@ defmodule MkapsWeb.BoardLive do
   defp parse_grapheme_groups([], acc), do: Enum.reverse(acc)
 
   defp parse_grapheme_groups(["_" | rest], acc) do
-    {underlined, remaining} = collect_until(rest, "_", [])
-    parse_grapheme_groups(remaining, [{underlined, "underline"} | acc])
+    {group, remaining} = collect_until(rest, "_", [])
+    parse_grapheme_groups(remaining, [{group, "underline"} | acc])
   end
 
-  defp parse_grapheme_groups(["(" | rest], acc) do
-    {group, remaining} = collect_until(rest, ")", [])
-    parse_grapheme_groups(remaining, [{group, nil} | acc])
+  defp parse_grapheme_groups(["[" , deco, ":" | rest], acc) do
+    {group, remaining} = collect_until(rest, "]", [])
+    parse_grapheme_groups(remaining, [{group, deco} | acc])
   end
 
   defp parse_grapheme_groups([char , "。" | rest], acc) do
