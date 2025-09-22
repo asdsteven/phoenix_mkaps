@@ -15,9 +15,31 @@ defmodule MkapsWeb.BoardLive do
      |> assign(toggle_pan: true, toggle_zoom: false, toggle_rotate: false)
      |> assign(lesson: nil)
      |> allow_upload(:image,
-                     accept: :any,
+                     accept: ~w(.jpg .jpeg .png .gif .webp .avif .svg),
                      max_file_size: 1_000_000_000,
-                     progress: fn :image, entry, socket -> {:noreply, assign(socket, progress: entry.progress)} end)}
+                     max_entries: 20,
+                     auto_upload: true,
+                     progress: &handle_progress/3)}
+  end
+
+  defp handle_progress(:image, entry, socket) do
+    if entry.done? do
+      consume_uploaded_entry(socket, entry, fn %{path: path} ->
+        random_name = entry.uuid <> Path.extname(entry.client_name)
+        uploads_path = Application.fetch_env!(:mkaps, MkapsWeb.FileLive)[:uploads_path]
+        dest = Path.join(uploads_path, random_name)
+        File.cp!(path, dest)
+        {:ok, nil}
+      end)
+      {:noreply,
+       socket
+       |> assign(progresses: Map.delete(socket.assigns.progresses, entry.uuid))
+       |> assign(uploaded_images: get_uploaded_images())}
+    else
+      {:noreply,
+       socket
+       |> assign(progresses: Map.put(socket.assigns.progresses, entry.uuid, entry.progress))}
+    end
   end
 
   def handle_info(slide, socket) do
@@ -41,7 +63,7 @@ defmodule MkapsWeb.BoardLive do
      socket
      |> assign(lesson: Lesson |> preload(:slides) |> Repo.get!(String.to_integer(lesson_id)))
      |> assign(slide_changes: %{})
-     |> assign(progress: 0, uploaded_images: get_uploaded_images())}
+     |> assign(progresses: %{}, uploaded_images: get_uploaded_images())}
   end
 
   def handle_params(%{"lesson_id" => lesson_id, "slide_position" => slide_position}, _uri, socket)
@@ -54,9 +76,11 @@ defmodule MkapsWeb.BoardLive do
         _ -> Lesson |> preload(:slides) |> Repo.get!(id)
       end
     slide = Enum.find(lesson.slides, &(&1.position == position))
-    case socket.assigns[:slide] do
-      nil -> Phoenix.PubSub.subscribe(Mkaps.PubSub, "slide:#{slide.id}")
-      prev_slide ->
+    case {socket.assigns[:slide], slide} do
+      {nil, nil} -> nil
+      {prev_slide, nil} -> Phoenix.PubSub.unsubscribe(Mkaps.PubSub, "slide:#{prev_slide.id}")
+      {nil, slide} -> Phoenix.PubSub.subscribe(Mkaps.PubSub, "slide:#{slide.id}")
+      {prev_slide, slide} ->
         if prev_slide.id != slide.id do
           Phoenix.PubSub.unsubscribe(Mkaps.PubSub, "slide:#{prev_slide.id}")
           Phoenix.PubSub.subscribe(Mkaps.PubSub, "slide:#{slide.id}")
@@ -150,7 +174,7 @@ defmodule MkapsWeb.BoardLive do
 
   attr :lesson, Lesson, required: true
   attr :slide_changes, :map, required: true
-  attr :progress, :integer, required: true
+  attr :progresses, :map, required: true
   attr :uploaded_images, :list, required: true
   defp edit(assigns) do
     ~H"""
@@ -164,8 +188,7 @@ defmodule MkapsWeb.BoardLive do
     <.edit_slide form={to_form(Slide.changeset(%Slide{lesson_id: @lesson.id}, Map.get(@slide_changes, -1, %{})))} />
     <form phx-submit="submit-image" phx-change="change-image" class="m-2">
       <.live_file_input upload={@uploads.image} class="file-input file-input-primary" />
-      <button type="submit">Upload</button>
-      <span>{@progress}%</span>
+      <div :for={{_uuid, progress} <- @progresses} class="badge badge-primary">{progress}%</div>
     </form>
     <div>Click one of them to copy image link</div>
     <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
@@ -510,15 +533,7 @@ defmodule MkapsWeb.BoardLive do
   end
 
   def handle_event("submit-image", _params, socket) do
-    consume_uploaded_entries(socket, :image, fn %{path: path}, entry ->
-      random_name = Ecto.UUID.generate() <> Path.extname(entry.client_name)
-      uploads_path = Application.fetch_env!(:mkaps, MkapsWeb.FileLive)[:uploads_path]
-      dest = Path.join(uploads_path, random_name)
-      File.cp!(path, dest)
-    end)
-    {:noreply,
-     socket
-     |> assign(progress: 0, uploaded_images: get_uploaded_images())}
+    {:noreply, socket}
   end
 
   def handle_event("toggle-scroll", _params, socket) do

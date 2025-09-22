@@ -1,4 +1,4 @@
-FROM hexpm/elixir:1.18.4-erlang-28.0.2-debian-trixie-20250811-slim
+FROM hexpm/elixir:1.18.4-erlang-28.1-debian-trixie-20250908-slim
 
 WORKDIR /app
 
