@@ -388,7 +388,7 @@ Hooks.Canvas = {
     const dynamicLineWidth = (ink, prev, [t,x,y]) => {
       const dist = Math.sqrt(Math.pow(x - prev[1], 2) + Math.pow(y - prev[2], 2))
       const clamp = Math.min(20, dist)
-      return Math.min(30, 20 * (ink * 0.5 + 2 + 5 * Math.log((t - prev[0]) * 0.1 + 1)) / (20 + clamp))
+      return Math.min(50, 15 * (5 + 10 * Math.log((t - prev[0]) * 0.1 + 1)) / (20 + clamp))
     }
     const redraw = () => {
       timeout = null
@@ -435,6 +435,8 @@ Hooks.Canvas = {
     window.addEventListener('pointermove', (e) => {
       if (!strokings.has(e.pointerId)) return
       strokings.get(e.pointerId).push([Date.now(), e.x, e.y])
+      clearTimeout(timeout)
+      setTimeout(redraw, 0)
     })
     const pointerend = (e) => {
       if (!strokings.has(e.pointerId)) return
@@ -444,6 +446,8 @@ Hooks.Canvas = {
       slideStrokes.get(el.dataset.slideId).push(stroke)
       strokings.delete(e.pointerId)
       undoes.splice(0)
+      clearTimeout(timeout)
+      setTimeout(redraw, 0)
     }
     window.addEventListener('pointerup', pointerend)
     window.addEventListener('pointercancel', pointerend)

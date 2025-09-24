@@ -230,7 +230,7 @@ defmodule MkapsWeb.BoardLive do
           deco == "紫" && "px-[0.3em] py-[0.1em] inline-block rounded-full text-purple-900 bg-purple-400",
           deco == "灰" && "px-[0.3em] py-[0.1em] inline-block rounded-full text-zinc-900 bg-zinc-400"]}>
         <%= if deco == "網" do %>
-        <a class="link link-primary" target="_blank" href={Enum.join(grapheme_group)}>{Enum.join(grapheme_group)}</a>
+        <a class="link link-primary" draggable="false" target="_blank" href={Enum.join(grapheme_group)}>{Enum.join(grapheme_group)}</a>
         <% else %>
         <span :for={{grapheme, k} <- Enum.with_index(grapheme_group)}
           :if={grapheme != " "}
@@ -441,7 +441,7 @@ defmodule MkapsWeb.BoardLive do
       <div class="absolute size-full bg-zinc-800/90"></div>
       <canvas class={["absolute size-full z-9999", !@draw_color && "pointer-events-none"]}
         phx-hook="Canvas" id="canvas" width="3840" height="2160" style="image-rendering:pixelated"
-        data-color={@draw_color} data-slide-id={@slide.id}></canvas>
+        data-color={@draw_color} data-slide-id={@slide && @slide.id}></canvas>
       <.show_sentences :if={@slide && @slide.sentences} sentences={@slide.sentences}
         transforms={Map.get(@slide.transforms || %{}, "", %{})} auto_transforms={@auto_transforms}
         slide_id={@slide.id} highlights={@highlights} />
@@ -451,16 +451,16 @@ defmodule MkapsWeb.BoardLive do
       <.show_avatars :if={@slide && @slide.avatars} avatars={@slide.avatars || %{}} focus_id={@focus_id}
         transforms={Map.get(@slide.transforms || %{}, "", %{})} auto_transforms={@auto_transforms} />
     </div>
-    <div class="fixed z-9999 bottom-0 left-1/2 transform -translate-x-1/2 join">
+    <div class="fixed z-9999 bottom-0 left-1/2 transform -translate-x-1/2 join select-none">
       <.link :for={slide <- @lesson.slides}
         class={["join-item btn btn-xs btn-outline", slide.position == @slide_position && "btn-primary"]}
         patch={~p"/lessons/#{@lesson.id}/slides/#{slide.position}"}>{slide.position}</.link>
     </div>
-    <div class="fixed z-9999 bottom-0 right-0">
+    <div class="fixed z-9999 bottom-0 right-0 select-none">
       <.link class="btn btn-circle btn-outline" patch={~p"/lessons/#{@lesson.id}/slides/#{@slide_position-1}"}>&lt;</.link>
       <.link class="btn btn-circle btn-outline" patch={~p"/lessons/#{@lesson.id}/slides/#{@slide_position+1}"}>&gt;</.link>
     </div>
-    <div class="fixed z-9999 bottom-0 left-0 flex flex-col">
+    <div class="fixed z-9999 bottom-0 left-0 flex flex-col select-none">
       <.show_avatar_ui :if={@slide && String.starts_with?(@focus_id || "", "avatar-")} avatars={@slide.avatars} focus_id={@focus_id} />
       <.show_save_transforms :if={@slide && @slide.transforms} transforms_state={@transforms_state} transforms={@slide.transforms} />
       <.show_draw draw_color={@draw_color} choose_draw_color={@choose_draw_color} />
