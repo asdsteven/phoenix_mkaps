@@ -376,6 +376,94 @@ Hooks.Touchable = {
   }
 }
 
+const slideStrokes = new Map()
+
+Hooks.Canvas = {
+  mounted() {
+    const el = this.el
+    const ctx = el.getContext('2d')
+    const strokings = new Map()
+    const undoes = []
+    let timeout = null
+    const dynamicLineWidth = (ink, prev, [t,x,y]) => {
+      const dist = Math.sqrt(Math.pow(x - prev[1], 2) + Math.pow(y - prev[2], 2))
+      const clamp = Math.min(20, dist)
+      return Math.min(30, 20 * (ink * 0.5 + 2 + 5 * Math.log((t - prev[0]) * 0.1 + 1)) / (20 + clamp))
+    }
+    const redraw = () => {
+      timeout = null
+      ctx.clearRect(0, 0, el.width, el.height)
+      ctx.lineCap = 'round'
+      for (const stroke of slideStrokes.get(el.dataset.slideId) || []) {
+        ctx.strokeStyle = stroke[0]
+        let prev = stroke[1]
+        let ink = 0
+        for (const [t,x,y] of stroke.slice(2)) {
+          ctx.lineWidth = ink = dynamicLineWidth(ink, prev, [t,x,y])
+          ctx.beginPath()
+          ctx.moveTo(prev[1]*3, prev[2]*3)
+          ctx.lineTo(x*3, y*3)
+          ctx.stroke()
+          prev = [t,x,y]
+        }
+      }
+      for (const stroke of strokings.values()) {
+        ctx.strokeStyle = stroke[0]
+        let prev = stroke[1]
+        let ink = 0
+        for (const [t,x,y] of stroke.slice(2)) {
+          ctx.lineWidth = ink = dynamicLineWidth(ink, prev, [t,x,y])
+          ctx.beginPath()
+          ctx.moveTo(prev[1]*3, prev[2]*3)
+          ctx.lineTo(x*3, y*3)
+          ctx.stroke()
+          prev = [t,x,y]
+        }
+        ctx.lineWidth = dynamicLineWidth(ink, prev, [Date.now(),prev[1],prev[2]])
+        ctx.beginPath()
+        ctx.moveTo(prev[1]*3, prev[2]*3)
+        ctx.lineTo(prev[1]*3, prev[2]*3)
+        ctx.stroke()
+      }
+      if (strokings.size > 0) timeout = setTimeout(redraw, 100)
+    }
+    el.addEventListener('pointerdown', (e) => {
+      if (el.dataset.color === undefined) return
+      strokings.set(e.pointerId, [el.dataset.color, [Date.now(), e.x, e.y]])
+      if (!timeout) timeout = setTimeout(redraw, 0)
+    })
+    window.addEventListener('pointermove', (e) => {
+      if (!strokings.has(e.pointerId)) return
+      strokings.get(e.pointerId).push([Date.now(), e.x, e.y])
+    })
+    const pointerend = (e) => {
+      if (!strokings.has(e.pointerId)) return
+      const stroke = strokings.get(e.pointerId)
+      stroke.push([Date.now(), e.x, e.y])
+      if (!slideStrokes.has(el.dataset.slideId)) slideStrokes.set(el.dataset.slideId, [])
+      slideStrokes.get(el.dataset.slideId).push(stroke)
+      strokings.delete(e.pointerId)
+      undoes.splice(0)
+    }
+    window.addEventListener('pointerup', pointerend)
+    window.addEventListener('pointercancel', pointerend)
+    this.handleEvent('undo', () => {
+      const stroke = slideStrokes.get(el.dataset.slideId)?.pop()
+      if (!stroke) return
+      undoes.push(stroke)
+      if (!timeout) timeout = setTimeout(redraw, 0)
+    })
+    this.handleEvent('redo', () => {
+      if (undoes.length == 0) return
+      slideStrokes.get(el.dataset.slideId).push(undoes.pop())
+      if (!timeout) timeout = setTimeout(redraw, 0)
+    })
+    this.handleEvent('redraw', () => {
+      if (!timeout) timeout = setTimeout(redraw, 0)
+    })
+  }
+}
+
 Hooks.CopyOnClick = {
   mounted() {
     this.el.addEventListener("click", () => {
