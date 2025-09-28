@@ -133,6 +133,7 @@ defmodule MkapsWeb.BoardLive do
   attr :lesson_changes, :map, required: true
   defp index(assigns) do
     ~H"""
+    <div id="idle-check" phx-hook="IdleDisconnect"></div>
     <div class="breadcrumbs">
       <ul>
         <li>Lessons</li>
@@ -181,6 +182,7 @@ defmodule MkapsWeb.BoardLive do
   attr :uploaded_images, :list, required: true
   defp edit(assigns) do
     ~H"""
+    <div id="idle-check" phx-hook="IdleDisconnect"></div>
     <div class="breadcrumbs">
       <ul>
         <li><.link patch={~p"/lessons"}>Lessons</.link></li>
@@ -429,6 +431,7 @@ defmodule MkapsWeb.BoardLive do
   attr :focus_id, :string, default: nil
   defp show_slide(assigns) do
     ~H"""
+    <div id="idle-check" phx-hook="IdleDisconnect"></div>
     <div class={["w-[1280px] h-[720px] bg-[url(/images/background1.jpg)] bg-cover bg-center relative overflow-hidden select-none",
       @toggle_scroll && "mkaps-toggle-scroll",
       @toggle_sentences && "mkaps-toggle-sentences",
@@ -439,6 +442,8 @@ defmodule MkapsWeb.BoardLive do
       not @toggle_scroll && "touch-none"]}
       phx-hook="Touchable" id="board">
       <div class="absolute size-full bg-zinc-800/90"></div>
+      <canvas class="absolute size-full z-9999 pointer-events-none"
+        id="static-canvas" width="3840" height="2160" style="image-rendering:pixelated"></canvas>
       <canvas class={["absolute size-full z-9999", !@draw_color && "pointer-events-none"]}
         phx-hook="Canvas" id="canvas" width="3840" height="2160" style="image-rendering:pixelated"
         data-color={@draw_color} data-slide-id={@slide && @slide.id}></canvas>
@@ -726,7 +731,7 @@ defmodule MkapsWeb.BoardLive do
      |> assign(focus_id: focus_id)}
   end
 
-  def handle_event("log", %{"msg" => msg}, socket) do
+  def handle_event("log", msg, socket) do
     IO.inspect(msg)
     {:noreply, socket}
   end
@@ -808,6 +813,10 @@ defmodule MkapsWeb.BoardLive do
      socket
      |> update(:lesson, &update_lesson_slide(&1, slide))
      |> assign(slide: slide)}
+  end
+
+  def handle_event("idle_disconnect", _params, socket) do
+    {:noreply, push_navigate(socket, to: "/assets/idle.html")}
   end
 
   defp decode_transforms(params) do

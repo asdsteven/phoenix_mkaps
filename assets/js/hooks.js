@@ -376,95 +376,147 @@ Hooks.Touchable = {
   }
 }
 
-const slideStrokes = new Map()
-
 Hooks.Canvas = {
   mounted() {
     const el = this.el
     const ctx = el.getContext('2d')
-    const strokings = new Map()
-    const undoes = []
-    let timeout = null
-    const dynamicLineWidth = (ink, prev, [t,x,y]) => {
-      const dist = Math.sqrt(Math.pow(x - prev[1], 2) + Math.pow(y - prev[2], 2))
-      const clamp = Math.min(20, dist)
-      return Math.min(50, 15 * (5 + 10 * Math.log((t - prev[0]) * 0.1 + 1)) / (20 + clamp))
+    ctx.lineCap = 'round'
+    const staticCanvas = document.getElementById('static-canvas')
+    const staticCtx = staticCanvas.getContext('2d')
+    staticCtx.lineCap = 'round'
+
+    const dynamicLineWidth = (prevWidth, prev, [t, x, y]) => {
+      const dt = Math.max(1, t - prev[0])
+      const dx = x - prev[1]
+      const dy = y - prev[2]
+      const dist = Math.max(1, Math.sqrt(dx * dx + dy * dy))
+      const speed = dist / dt
+      const maxWidth = 30
+      const minWidth = 1
+      const responsiveToSpeed = 0.5
+      const responsiveToDiffuse = 0.3
+
+      const target = minWidth + maxWidth * responsiveToDiffuse / (responsiveToDiffuse + Math.pow(speed, responsiveToSpeed))
+      if (!prevWidth) return target
+      return 0.3 * prevWidth + 0.7 * target
     }
-    const redraw = () => {
-      timeout = null
-      ctx.clearRect(0, 0, el.width, el.height)
-      ctx.lineCap = 'round'
-      for (const stroke of slideStrokes.get(el.dataset.slideId) || []) {
-        ctx.strokeStyle = stroke[0]
-        let prev = stroke[1]
-        let ink = 0
-        for (const [t,x,y] of stroke.slice(2)) {
-          ctx.lineWidth = ink = dynamicLineWidth(ink, prev, [t,x,y])
-          ctx.beginPath()
-          ctx.moveTo(prev[1]*3, prev[2]*3)
-          ctx.lineTo(x*3, y*3)
-          ctx.stroke()
-          prev = [t,x,y]
-        }
-      }
-      for (const stroke of strokings.values()) {
-        ctx.strokeStyle = stroke[0]
-        let prev = stroke[1]
-        let ink = 0
-        for (const [t,x,y] of stroke.slice(2)) {
-          ctx.lineWidth = ink = dynamicLineWidth(ink, prev, [t,x,y])
-          ctx.beginPath()
-          ctx.moveTo(prev[1]*3, prev[2]*3)
-          ctx.lineTo(x*3, y*3)
-          ctx.stroke()
-          prev = [t,x,y]
-        }
-        ctx.lineWidth = dynamicLineWidth(ink, prev, [Date.now(),prev[1],prev[2]])
+
+    const drawStroke = (ctx, width, prev, [t, x, y]) => {
+      if (x == prev[1] && y == prev[2]) {
         ctx.beginPath()
-        ctx.moveTo(prev[1]*3, prev[2]*3)
-        ctx.lineTo(prev[1]*3, prev[2]*3)
+        ctx.arc(x, y, width / 2, 0, 2 * Math.PI)
+        ctx.fill()
+      } else {
+        ctx.lineWidth = width
+        ctx.beginPath()
+        ctx.moveTo(prev[1], prev[2])
+        ctx.lineTo(x, y)
         ctx.stroke()
       }
-      if (strokings.size > 0) timeout = setTimeout(redraw, 100)
     }
+
+    const slideStrokes = new Map()
+    const slideRedoes = new Map()
+
+    const staticRedraw = () => {
+      staticCtx.clearRect(0, 0, el.width, el.height)
+      for (const stroke of slideStrokes.get(el.dataset.slideId) || []) {
+        staticCtx.strokeStyle = stroke[0]
+        staticCtx.fillStyle = stroke[0]
+        let prev = stroke[1]
+        let width = 0
+        for (const [t,x,y] of stroke.slice(2)) {
+          width = dynamicLineWidth(width, prev, [t,x,y])
+          drawStroke(staticCtx, width, prev, [t, x, y])
+          prev = [t,x,y]
+        }
+      }
+    }
+
+    const strokings = new Map()
+    let timeout = null
+    const diffuse = () => {
+      for (const stroke of strokings.values()) {
+        const p = stroke[stroke.length-1]
+        const width = dynamicLineWidth(0, p, [Date.now(), p[1], p[2]])
+        ctx.fillStyle = stroke[0]
+        ctx.beginPath()
+        ctx.arc(p[1], p[2], width / 2, 0, 2 * Math.PI)
+        ctx.fill()
+        console.log(width)
+      }
+      if (strokings.size) {
+        timeout = setTimeout(diffuse, 30)
+      } else {
+        timeout = null
+        ctx.clearRect(0, 0, el.width, el.height)
+      }
+    }
+
+    const dpr = 3
     el.addEventListener('pointerdown', (e) => {
       if (el.dataset.color === undefined) return
-      strokings.set(e.pointerId, [el.dataset.color, [Date.now(), e.x, e.y]])
-      if (!timeout) timeout = setTimeout(redraw, 0)
+      strokings.set(e.pointerId, [el.dataset.color, [Date.now(), e.x*dpr, e.y*dpr]])
+      timeout = timeout || setTimeout(diffuse, 0)
     })
     window.addEventListener('pointermove', (e) => {
-      if (!strokings.has(e.pointerId)) return
-      strokings.get(e.pointerId).push([Date.now(), e.x, e.y])
+      const stroke = strokings.get(e.pointerId)
+      if (!stroke) return
+      const prev = stroke[stroke.length-1]
+      const curr = [Date.now(), e.x*dpr, e.y*dpr]
+      const width = dynamicLineWidth(0, prev, curr)
+      ctx.strokeStyle = stroke[0]
+      drawStroke(ctx, width, prev, curr)
+      stroke.push(curr)
       clearTimeout(timeout)
-      setTimeout(redraw, 0)
+      timeout = setTimeout(diffuse, 30)
     })
     const pointerend = (e) => {
-      if (!strokings.has(e.pointerId)) return
       const stroke = strokings.get(e.pointerId)
-      stroke.push([Date.now(), e.x, e.y])
+      if (!stroke) return
+      stroke.push([Date.now(), e.x*dpr, e.y*dpr])
       if (!slideStrokes.has(el.dataset.slideId)) slideStrokes.set(el.dataset.slideId, [])
       slideStrokes.get(el.dataset.slideId).push(stroke)
+      slideRedoes.delete(el.dataset.slideId)
       strokings.delete(e.pointerId)
-      undoes.splice(0)
-      clearTimeout(timeout)
-      setTimeout(redraw, 0)
+      staticRedraw()
     }
     window.addEventListener('pointerup', pointerend)
     window.addEventListener('pointercancel', pointerend)
+
     this.handleEvent('undo', () => {
       const stroke = slideStrokes.get(el.dataset.slideId)?.pop()
       if (!stroke) return
-      undoes.push(stroke)
-      if (!timeout) timeout = setTimeout(redraw, 0)
+      if (!slideRedoes.has(el.dataset.slideId)) slideRedoes.set(el.dataset.slideId, [])
+      slideRedoes.get(el.dataset.slideId).push(stroke)
+      staticRedraw()
     })
     this.handleEvent('redo', () => {
-      if (undoes.length == 0) return
-      slideStrokes.get(el.dataset.slideId).push(undoes.pop())
-      if (!timeout) timeout = setTimeout(redraw, 0)
+      const stroke = slideRedoes.get(el.dataset.slideId)?.pop()
+      if (!stroke) return
+      slideStrokes.get(el.dataset.slideId).push(stroke)
+      staticRedraw()
     })
     this.handleEvent('redraw', () => {
-      if (!timeout) timeout = setTimeout(redraw, 0)
+      staticRedraw()
     })
+  }
+}
+
+Hooks.IdleDisconnect = {
+  mounted() {
+    let idleTimeout
+
+    const resetTimer = () => {
+      clearTimeout(idleTimeout)
+      idleTimeout = setTimeout(() => {
+        this.pushEvent("idle_disconnect", {})
+      }, 20 * 60 * 1000)
+    }
+
+    resetTimer()
+    window.addEventListener('pointerdown', () => resetTimer())
+    window.addEventListener('pointermove', () => resetTimer())
   }
 }
 
@@ -488,6 +540,34 @@ Hooks.FullScreen = {
       } else {
         document.documentElement.requestFullscreen?.()
       }
+    })
+  }
+}
+
+Hooks.Experiment = {
+  mounted() {
+    const el = this.el
+    const ctx = el.getContext('2d')
+    const strokes = []
+    const redraw = () => {
+      ctx.clearRect(0, 0, el.width, el.height)
+      ctx.lineCap = 'round'
+      ctx.strokeStyle = '#00ff00'
+      ctx.lineWidth = 20
+      ctx.beginPath()
+      ctx.moveTo(strokes[0][0]*3, strokes[0][1]*3)
+      for (const stroke of strokes.slice(1)) {
+        ctx.lineTo(stroke[0]*3, stroke[1]*3)
+      }
+      ctx.stroke()
+    }
+    window.addEventListener('touchstart', (e) => {
+      strokes.push([e.touches[0].clientX, e.touches[0].clientY])
+      redraw()
+    })
+    window.addEventListener('pointermove', (e) => {
+      strokes.push([e.clientX, e.clientY])
+      redraw()
     })
   }
 }

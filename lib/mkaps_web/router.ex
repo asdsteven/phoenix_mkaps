@@ -21,6 +21,7 @@ defmodule MkapsWeb.Router do
     get "/file.pdf", FileController, :file
     get "/uploads/:filename", FileController, :image
     live "/file", FileLive
+    live "/experiment", ExperimentLive, :index
     live "/", BoardLive, :index
     live "/lessons", BoardLive, :index
     live "/lessons/:lesson_id/edit", BoardLive, :edit
