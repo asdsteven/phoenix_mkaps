@@ -293,7 +293,7 @@ defmodule MkapsWeb.BoardLive do
       phx-hook="Touchable" id={"avatar-#{i}"}
       style={get_avatar_style(@transforms, @auto_transforms, "avatar-#{i}")}>
       <img class="w-full" draggable="false" src="/images/schoolbag.png"
-        style={"filter:#{Map.get(Map.get(@avatars, "avatar-#{i}", %{}), "filter", "")}" <>
+        style={"filter:#{Map.get(Map.get(@avatars, "avatar-#{i}", %{}), "filter", "saturate(51%) hue-rotate(356deg) brightness(157%)")}" <>
           if @focus_id == "avatar-#{i}", do: " drop-shadow(0 0 10px #fff)", else: ""} />
       <span class="absolute bottom-[9%] left-[26%] -translate-x-1/2 rotate-14 text-black kai"
         style={"#{get_avatar_name_size(@transforms, @auto_transforms, "avatar-#{i}")};text-shadow: 0 0 4px white"}>{name}</span>
