@@ -227,7 +227,7 @@ defmodule MkapsWeb.BoardLive do
           deco == "紅" && "px-[0.3em] py-[0.1em] inline-block rounded-full text-pink-900 bg-pink-400",
           deco == "橙" && "px-[0.3em] py-[0.1em] inline-block rounded-full text-orange-900 bg-orange-400",
           deco == "黃" && "px-[0.3em] py-[0.1em] inline-block rounded-full text-amber-900 bg-amber-400",
-          deco == "綠" && "px-[0.3em] py-[0.1em] inline-block rounded-full text-green-900 bg-green-400",
+          deco == "綠" && "px-[0.3em] py-[0.1em] inline-block rounded-full text-green-900 bg-green-500",
           deco == "藍" && "px-[0.3em] py-[0.1em] inline-block rounded-full text-blue-900 bg-blue-400",
           deco == "紫" && "px-[0.3em] py-[0.1em] inline-block rounded-full text-purple-900 bg-purple-400",
           deco == "灰" && "px-[0.3em] py-[0.1em] inline-block rounded-full text-zinc-900 bg-zinc-400"]}>
@@ -292,9 +292,9 @@ defmodule MkapsWeb.BoardLive do
       class="absolute h-auto mkaps-avatar mkaps-drag"
       phx-hook="Touchable" id={"avatar-#{i}"}
       style={get_avatar_style(@transforms, @auto_transforms, "avatar-#{i}")}>
-      <img class="w-full" draggable="false" src="/uploads/8ebf6bb7-a9f3-4747-9779-5cfef787b514.png"
-        style={"filter:hue-rotate(#{Map.get(Map.get(@avatars, "avatar-#{i}", %{}), "hue", 180)}deg) brightness(1.5)" <>
-          if @focus_id == "avatar-#{i}", do: " drop-shadow(0 0 5px #ff0)", else: ""} />
+      <img class="w-full" draggable="false" src="/images/schoolbag.png"
+        style={"filter:#{Map.get(Map.get(@avatars, "avatar-#{i}", %{}), "filter", "")}" <>
+          if @focus_id == "avatar-#{i}", do: " drop-shadow(0 0 10px #fff)", else: ""} />
       <span class="absolute bottom-[9%] left-[26%] -translate-x-1/2 rotate-14 text-black kai"
         style={"#{get_avatar_name_size(@transforms, @auto_transforms, "avatar-#{i}")};text-shadow: 0 0 4px white"}>{name}</span>
       <span class="absolute rotate-14"
@@ -317,9 +317,12 @@ defmodule MkapsWeb.BoardLive do
         phx-click="delete-badge" disabled={Map.get(Map.get(@avatars, @focus_id, %{}), "badges", []) == []}>X</button>
     </div>
     <div class="join">
-      <button class="join-item btn btn-sm kai btn-outline" phx-click="hue-left">&lt;</button>
-      <button class="join-item btn btn-sm btn-outline" disabled>{div(Map.get(Map.get(@avatars, @focus_id, %{}), "hue", 180), 30) + 1}</button>
-      <button class="join-item btn btn-sm kai btn-outline" phx-click="hue-right">&gt;</button>
+      <button class="join-item btn btn-sm kai btn-outline text-red-500" phx-click="choose-avatar-color" phx-value-filter="saturate(51%) hue-rotate(356deg) brightness(157%)">⬤</button>
+      <button class="join-item btn btn-sm kai btn-outline text-orange-400" phx-click="choose-avatar-color" phx-value-filter="saturate(1167%) hue-rotate(54deg) brightness(200%)">⬤</button>
+      <button class="join-item btn btn-sm kai btn-outline text-yellow-300" phx-click="choose-avatar-color" phx-value-filter="saturate(7029%) hue-rotate(67deg) brightness(319%)">⬤</button>
+      <button class="join-item btn btn-sm kai btn-outline text-green-500" phx-click="choose-avatar-color" phx-value-filter="saturate(1538%) hue-rotate(163deg) brightness(171%)">⬤</button>
+      <button class="join-item btn btn-sm kai btn-outline text-blue-500" phx-click="choose-avatar-color" phx-value-filter="saturate(214%) hue-rotate(204deg) brightness(142%)">⬤</button>
+      <button class="join-item btn btn-sm kai btn-outline text-purple-500" phx-click="choose-avatar-color" phx-value-filter="saturate(940%) hue-rotate(276deg) brightness(132%)">⬤</button>
     </div>
     """
   end
@@ -333,7 +336,7 @@ defmodule MkapsWeb.BoardLive do
       <button class="join-item btn btn-sm kai btn-outline text-red-500" phx-click="choose-draw-color" phx-value-color="oklch(63.7% 0.237 25.331)">⬤</button>
       <button class="join-item btn btn-sm kai btn-outline text-orange-400" phx-click="choose-draw-color" phx-value-color="oklch(75% 0.183 55.934)">⬤</button>
       <button class="join-item btn btn-sm kai btn-outline text-yellow-300" phx-click="choose-draw-color" phx-value-color="oklch(90.5% 0.182 98.111)">⬤</button>
-      <button class="join-item btn btn-sm kai btn-outline text-green-400" phx-click="choose-draw-color" phx-value-color="oklch(79.2% 0.209 151.711)">⬤</button>
+      <button class="join-item btn btn-sm kai btn-outline text-green-500" phx-click="choose-draw-color" phx-value-color="oklch(72.3% 0.219 149.579)">⬤</button>
       <button class="join-item btn btn-sm kai btn-outline text-blue-500" phx-click="choose-draw-color" phx-value-color="oklch(62.3% 0.214 259.815)">⬤</button>
       <button class="join-item btn btn-sm kai btn-outline text-purple-500" phx-click="choose-draw-color" phx-value-color="oklch(62.7% 0.265 303.9)">⬤</button>
       <% else %>
@@ -791,21 +794,9 @@ defmodule MkapsWeb.BoardLive do
      |> assign(slide: slide)}
   end
 
-  def handle_event("hue-left", _params, socket) do
+  def handle_event("choose-avatar-color", %{"filter" => filter}, socket) do
     avatar = Map.get(socket.assigns.slide.avatars || %{}, socket.assigns.focus_id)
-    new_avatar = Map.update(avatar || %{}, "hue", 150, &(rem(&1 + 330, 360)))
-    avatars = Map.put(socket.assigns.slide.avatars || %{}, socket.assigns.focus_id, new_avatar)
-    slide = socket.assigns.slide |> Slide.changeset(%{avatars: avatars}) |> Repo.update!
-    Phoenix.PubSub.broadcast_from(Mkaps.PubSub, self(), "slide:#{slide.id}", slide)
-    {:noreply,
-     socket
-     |> update(:lesson, &update_lesson_slide(&1, slide))
-     |> assign(slide: slide)}
-  end
-
-  def handle_event("hue-right", _params, socket) do
-    avatar = Map.get(socket.assigns.slide.avatars || %{}, socket.assigns.focus_id)
-    new_avatar = Map.update(avatar || %{}, "hue", 210, &(rem(&1 + 30, 360)))
+    new_avatar = Map.put(avatar || %{}, "filter", filter)
     avatars = Map.put(socket.assigns.slide.avatars || %{}, socket.assigns.focus_id, new_avatar)
     slide = socket.assigns.slide |> Slide.changeset(%{avatars: avatars}) |> Repo.update!
     Phoenix.PubSub.broadcast_from(Mkaps.PubSub, self(), "slide:#{slide.id}", slide)
