@@ -281,7 +281,7 @@ Hooks.Touchable = {
           p.origins = new Map()
           setAllOrigins(p.origins)
           const events = persistent(el)
-          if (events.length > 0) this.pushEvent('drags', events)
+          if (events.length > 0) this.pushEvent('commit', events)
         } else if (draggings.has(el)) {
           p.originX = p.x
           p.originY = p.y
@@ -289,7 +289,7 @@ Hooks.Touchable = {
           p.elY = parseInt(el.style.top, 10)
           p.elZ = parseInt(el.style.zIndex, 10)
           p.elSize = getSize(el)
-          this.pushEvent('drags', [xyzSize(el)])
+          this.pushEvent('commit', [xyzSize(el)])
         }
       } else  {
         const p = pointers[0]
@@ -303,7 +303,7 @@ Hooks.Touchable = {
           q.originX = q.x
           q.originY = q.y
           const events = persistent(el)
-          if (events.length > 0) this.pushEvent('drags', events)
+          if (events.length > 0) this.pushEvent('commit', events)
         } else {
           p.originX = p.x
           p.originY = p.y
@@ -313,7 +313,7 @@ Hooks.Touchable = {
           p.elSize = getSize(el)
           q.originX = q.x
           q.originY = q.y
-          this.pushEvent('drags', [xyzSize(el)])
+          this.pushEvent('commit', [xyzSize(el)])
         }
       }
     }
@@ -371,7 +371,7 @@ Hooks.Touchable = {
       } else {
         multiTouch()
       }
-      if (!timeout) timeout = setTimeout(commit, 100)
+      timeout = timeout || setTimeout(commit, 100)
     })
   }
 }

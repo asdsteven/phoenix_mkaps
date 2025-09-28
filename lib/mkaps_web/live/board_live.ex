@@ -293,8 +293,8 @@ defmodule MkapsWeb.BoardLive do
       phx-hook="Touchable" id={"avatar-#{i}"}
       style={get_avatar_style(@transforms, @auto_transforms, "avatar-#{i}")}>
       <img class="w-full" draggable="false" src="/images/schoolbag.png"
-        style={"filter:#{Map.get(Map.get(@avatars, "avatar-#{i}", %{}), "filter", "saturate(51%) hue-rotate(356deg) brightness(157%)")}" <>
-          if @focus_id == "avatar-#{i}", do: " drop-shadow(0 0 10px #fff)", else: ""} />
+        style={"filter:#{Map.get(Map.get(@avatars, "avatar-#{i}", %{}), "filter", "contrast(3) grayscale(1) brightness(4)")}" <>
+          if @focus_id == "avatar-#{i}", do: " drop-shadow(0 0 10px #000)", else: ""} />
       <span class="absolute bottom-[9%] left-[26%] -translate-x-1/2 rotate-14 text-black kai"
         style={"#{get_avatar_name_size(@transforms, @auto_transforms, "avatar-#{i}")};text-shadow: 0 0 4px white"}>{name}</span>
       <span class="absolute rotate-14"
@@ -317,12 +317,13 @@ defmodule MkapsWeb.BoardLive do
         phx-click="delete-badge" disabled={Map.get(Map.get(@avatars, @focus_id, %{}), "badges", []) == []}>X</button>
     </div>
     <div class="join">
-      <button class="join-item btn btn-sm kai btn-outline text-red-500" phx-click="choose-avatar-color" phx-value-filter="saturate(51%) hue-rotate(356deg) brightness(157%)">⬤</button>
-      <button class="join-item btn btn-sm kai btn-outline text-orange-400" phx-click="choose-avatar-color" phx-value-filter="saturate(1167%) hue-rotate(54deg) brightness(200%)">⬤</button>
-      <button class="join-item btn btn-sm kai btn-outline text-yellow-300" phx-click="choose-avatar-color" phx-value-filter="saturate(7029%) hue-rotate(67deg) brightness(319%)">⬤</button>
-      <button class="join-item btn btn-sm kai btn-outline text-green-500" phx-click="choose-avatar-color" phx-value-filter="saturate(1538%) hue-rotate(163deg) brightness(171%)">⬤</button>
-      <button class="join-item btn btn-sm kai btn-outline text-blue-500" phx-click="choose-avatar-color" phx-value-filter="saturate(214%) hue-rotate(204deg) brightness(142%)">⬤</button>
-      <button class="join-item btn btn-sm kai btn-outline text-purple-500" phx-click="choose-avatar-color" phx-value-filter="saturate(940%) hue-rotate(276deg) brightness(132%)">⬤</button>
+      <button class="join-item btn btn-sm kai btn-outline text-red-500" phx-click="choose-avatar-color" phx-value-filter="hue-rotate(345deg) brightness(99%)">⬤</button>
+      <button class="join-item btn btn-sm kai btn-outline text-orange-400" phx-click="choose-avatar-color" phx-value-filter="hue-rotate(59deg) brightness(240%)">⬤</button>
+      <button class="join-item btn btn-sm kai btn-outline text-yellow-300" phx-click="choose-avatar-color" phx-value-filter="hue-rotate(67deg) brightness(325%)">⬤</button>
+      <button class="join-item btn btn-sm kai btn-outline text-green-500" phx-click="choose-avatar-color" phx-value-filter="hue-rotate(163deg) brightness(171%)">⬤</button>
+      <button class="join-item btn btn-sm kai btn-outline text-blue-500" phx-click="choose-avatar-color" phx-value-filter="hue-rotate(204deg) brightness(142%)">⬤</button>
+      <button class="join-item btn btn-sm kai btn-outline text-purple-500" phx-click="choose-avatar-color" phx-value-filter="hue-rotate(272deg) brightness(150%)">⬤</button>
+      <button class="join-item btn btn-sm kai btn-outline text-white" phx-click="choose-avatar-color" phx-value-filter="contrast(3) grayscale(1) brightness(4)">⬤</button>
     </div>
     """
   end
@@ -732,6 +733,18 @@ defmodule MkapsWeb.BoardLive do
      |> update(:lesson, &update_lesson_slide(&1, slide))
      |> assign(slide: slide)
      |> assign(focus_id: focus_id)}
+  end
+
+  def handle_event("commit", drags, socket) do
+    active_transforms = Map.get(socket.assigns.slide.transforms || %{}, "", socket.assigns.auto_transforms)
+    new_active_transforms = Enum.reduce(drags, active_transforms, fn drag, m ->
+      %{"item" => item_id, "x" => x, "y" => y, "z" => z, "size" => size} = drag
+      Map.put(m, item_id, [x,y,z,size])
+    end)
+    transforms = Map.put(socket.assigns.slide.transforms || %{}, "", new_active_transforms)
+    slide = socket.assigns.slide |> Slide.changeset(%{transforms: transforms}) |> Repo.update!
+    Phoenix.PubSub.broadcast_from(Mkaps.PubSub, self(), "slide:#{slide.id}", slide)
+    {:noreply, socket}
   end
 
   def handle_event("log", msg, socket) do
