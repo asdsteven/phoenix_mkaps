@@ -337,6 +337,8 @@ defmodule MkapsWeb.BoardLive do
 
   attr :draw_color, :string, required: true
   attr :draw_colors, :list, required: true
+  attr :max_seek, :integer, required: true
+  attr :knob, :integer, required: true
   defp show_draw(assigns) do
     ~H"""
     <div class="join tooltip tooltip-right pointer-events-auto" data-tip="啟用繪畫、復原、重做">
@@ -344,8 +346,8 @@ defmodule MkapsWeb.BoardLive do
       <button :for={{css, oklch} <- @draw_colors}
         class={["join-item btn btn-sm btn-outline", css]}
         phx-click="choose-draw-color" phx-value-color={oklch}>{if @draw_color == oklch, do: "●", else: "○"}</button>
-      <button class="join-item btn btn-sm btn-outline" phx-click="draw-undo">↶</button>
-      <button class="join-item btn btn-sm btn-outline" phx-click="draw-redo">↷</button>
+      <button class="join-item btn btn-sm btn-outline" phx-click="draw-undo" disabled={!@knob || @knob == 0}>↶</button>
+      <button class="join-item btn btn-sm btn-outline" phx-click="draw-redo" disabled={!@knob || @knob == @max_seek}>↷</button>
       <% else %>
       <button class="join-item btn btn-sm btn-outline text-red-500" phx-click="choose-draw-color" phx-value-color="oklch(63.7% 0.237 25.331)">○</button>
       <% end %>
@@ -482,9 +484,9 @@ defmodule MkapsWeb.BoardLive do
       <div class="flex flex-col items-stretch">
         <div>
           <.show_toggle_gestures toggle_pan={@toggle_pan} toggle_zoom={@toggle_zoom} toggle_rotate={@toggle_rotate} />
-          <.show_draw draw_color={@draw_color} draw_colors={@draw_colors} />
+          <.show_draw draw_color={@draw_color} draw_colors={@draw_colors} max_seek={@max_seek} knob={@knob} />
         </div>
-        <%= if @draw_color && @max_seek do %>
+        <%= if @draw_color && @knob do %>
         <form phx-change="seek">
           <input name="knob" type="range" min="0" max={@max_seek} value={@knob} class="range range-info w-full pointer-events-auto" />
         </form>
