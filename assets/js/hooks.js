@@ -416,16 +416,18 @@ Hooks.Canvas = {
     }
 
     const slideStrokes = new Map()
-    const slideRedoes = new Map()
+    const slideKnob = new Map()
 
     const staticRedraw = () => {
       staticCtx.clearRect(0, 0, el.width, el.height)
+      const knob = slideKnob.get(el.dataset.slideId)
       for (const stroke of slideStrokes.get(el.dataset.slideId) || []) {
         staticCtx.strokeStyle = stroke[0]
         staticCtx.fillStyle = stroke[0]
         let prev = stroke[1]
         let width = 0
         for (const [t,x,y] of stroke.slice(2)) {
+          if (knob && knob[1] < t) return
           width = dynamicLineWidth(width, prev, [t,x,y])
           drawStroke(staticCtx, width, prev, [t, x, y])
           prev = [t,x,y]
@@ -443,7 +445,6 @@ Hooks.Canvas = {
         ctx.beginPath()
         ctx.arc(p[1], p[2], width / 2, 0, 2 * Math.PI)
         ctx.fill()
-        console.log(width)
       }
       if (strokings.size) {
         timeout = setTimeout(diffuse, 30)
@@ -475,9 +476,35 @@ Hooks.Canvas = {
       const stroke = strokings.get(e.pointerId)
       if (!stroke) return
       stroke.push([Date.now(), e.x*dpr, e.y*dpr])
-      if (!slideStrokes.has(el.dataset.slideId)) slideStrokes.set(el.dataset.slideId, [])
-      slideStrokes.get(el.dataset.slideId).push(stroke)
-      slideRedoes.delete(el.dataset.slideId)
+
+      const strokes = slideStrokes.get(el.dataset.slideId) || []
+      const knob = slideKnob.get(el.dataset.slideId)
+      if (knob) {
+        if (knob[1] == 0) {
+          strokes.splice(0)
+        } else {
+          strokes.splice(knob[0] + 1)
+        }
+      }
+
+      const lastStroke = strokes[strokes.length-1]
+      let t0 = 1
+      if (lastStroke) {
+        while (knob && lastStroke[lastStroke.length-1][0] > knob[1]) lastStroke.pop()
+        t0 = lastStroke[lastStroke.length-1][0] + 100
+      }
+      const dt = stroke[1][0] - t0
+      if (dt > 0) {
+        for (let i = 1; i < stroke.length; i++) {
+          stroke[i][0] -= dt
+        }
+      }
+      const maxSeek = stroke[stroke.length-1][0]
+      this.pushEvent('seeked', {knob: maxSeek, max_seek: maxSeek})
+
+      strokes.push(stroke)
+      slideStrokes.set(el.dataset.slideId, strokes)
+      slideKnob.delete(el.dataset.slideId)
       strokings.delete(e.pointerId)
       staticRedraw()
     }
@@ -485,16 +512,39 @@ Hooks.Canvas = {
     window.addEventListener('pointercancel', pointerend)
 
     this.handleEvent('undo', () => {
-      const stroke = slideStrokes.get(el.dataset.slideId)?.pop()
-      if (!stroke) return
-      if (!slideRedoes.has(el.dataset.slideId)) slideRedoes.set(el.dataset.slideId, [])
-      slideRedoes.get(el.dataset.slideId).push(stroke)
+      const strokes = slideStrokes.get(el.dataset.slideId)
+      if (!strokes) return
+      const [i, _t] = slideKnob.get(el.dataset.slideId) || [strokes.length-1, null]
+      let knob = [0, 0]
+      if (i > 0) {
+        const stroke = strokes[i-1]
+        knob = [i-1, stroke[stroke.length-1][0]]
+      }
+      slideKnob.set(el.dataset.slideId, knob)
+      this.pushEvent('seeked', {knob: knob[1]})
       staticRedraw()
     })
     this.handleEvent('redo', () => {
-      const stroke = slideRedoes.get(el.dataset.slideId)?.pop()
-      if (!stroke) return
-      slideStrokes.get(el.dataset.slideId).push(stroke)
+      const strokes = slideStrokes.get(el.dataset.slideId)
+      if (!strokes) return
+      let [i, t] = slideKnob.get(el.dataset.slideId) || [strokes.length-1, null]
+      if (t > 0) i = Math.min(strokes.length-1, i + 1)
+      const stroke = strokes[i]
+      const knob = [i, stroke[stroke.length-1][0]]
+      slideKnob.set(el.dataset.slideId, knob)
+      this.pushEvent('seeked', {knob: knob[1]})
+      staticRedraw()
+    })
+    this.handleEvent('seek', ({knob}) => {
+      const strokes = slideStrokes.get(el.dataset.slideId)
+      if (!strokes) return
+      let i = 0
+      while (true) {
+        const stroke = strokes[i]
+        if (knob <= stroke[stroke.length-1][0]) break
+        i++
+      }
+      slideKnob.set(el.dataset.slideId, [i, knob])
       staticRedraw()
     })
     this.handleEvent('redraw', () => {

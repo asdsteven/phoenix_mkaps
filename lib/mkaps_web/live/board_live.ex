@@ -12,9 +12,14 @@ defmodule MkapsWeb.BoardLive do
      |> assign(image_frames: %{})
      |> assign(toggle_scroll: false, toggle_sentences: false, toggle_images: false)
      |> assign(transforms_state: :pending)
-     |> assign(draw_color: nil, choose_draw_color: false)
      |> assign(toggle_pan: true, toggle_zoom: false, toggle_rotate: false)
      |> assign(lesson: nil)
+     |> assign(draw_colors: [{"text-red-500", "oklch(63.7% 0.237 25.331)"},
+                             {"text-orange-400", "oklch(75% 0.183 55.934)"},
+                             {"text-yellow-300", "oklch(90.5% 0.182 98.111)"},
+                             {"text-green-500", "oklch(72.3% 0.219 149.579)"},
+                             {"text-blue-500", "oklch(62.3% 0.214 259.815)"},
+                             {"text-purple-500", "oklch(62.7% 0.265 303.9)"}])
      |> allow_upload(:image,
                      accept: ~w(.jpg .jpeg .png .gif .webp .avif .svg),
                      max_file_size: 1_000_000_000,
@@ -94,8 +99,11 @@ defmodule MkapsWeb.BoardLive do
      |> assign(slide_position: position)
      |> assign(auto_transforms: slide && auto_transform(slide, "top-bottom"))
      |> assign(transforms_state: :pending)
-     |> assign(choose_draw_color: false)
      |> assign(focus_id: nil)
+     |> assign(draw_color: nil)
+     |> assign(burger: true)
+     |> assign(knob: nil)
+     |> assign(max_seek: nil)
      |> push_event("redraw", %{})}
   end
 
@@ -139,7 +147,6 @@ defmodule MkapsWeb.BoardLive do
         <li>Lessons</li>
       </ul>
     </div>
-    <a href="https://sw.hkep.com/?semester=3A&unit=1&lesson=2&words=t311021&access_token=TXBzeWF5cnhVQ01sSlh0RmllVVUzMXFoaTk1blVITDFybUM1TVJGTmNZZnFQR21FWFpPR1dscmZ6b2FUb0dmLw==">詞語</a>
     <.index_lesson form={to_form(Lesson.changeset(%Lesson{}, Map.get(@lesson_changes, -1, %{})))} />
     <.index_lesson :for={lesson <- @lessons} form={to_form(Lesson.changeset(lesson, Map.get(@lesson_changes, lesson.id, %{})))} />
     """
@@ -294,7 +301,7 @@ defmodule MkapsWeb.BoardLive do
       style={get_avatar_style(@transforms, @auto_transforms, "avatar-#{i}")}>
       <img class="w-full" draggable="false" src="/images/schoolbag.png"
         style={"filter:#{Map.get(Map.get(@avatars, "avatar-#{i}", %{}), "filter", "contrast(3) grayscale(1) brightness(4)")}" <>
-          if @focus_id == "avatar-#{i}", do: " drop-shadow(0 0 10px #000)", else: ""} />
+          if @focus_id == "avatar-#{i}", do: " drop-shadow(0 0 10px #fff)", else: ""} />
       <span class="absolute bottom-[9%] left-[26%] -translate-x-1/2 rotate-14 text-black kai"
         style={"#{get_avatar_name_size(@transforms, @auto_transforms, "avatar-#{i}")};text-shadow: 0 0 4px white"}>{name}</span>
       <span class="absolute rotate-14"
@@ -309,14 +316,14 @@ defmodule MkapsWeb.BoardLive do
   attr :focus_id, :string, required: true
   defp show_avatar_ui(assigns) do
     ~H"""
-    <div class="join">
+    <div class="join pointer-events-auto">
       <button class="join-item btn btn-sm kai btn-outline" phx-click="add-badge" phx-value-badge="👍">👍</button>
       <button class="join-item btn btn-sm kai btn-outline" phx-click="add-badge" phx-value-badge="⭐">⭐</button>
       <button class="join-item btn btn-sm kai btn-outline" phx-click="add-badge" phx-value-badge="❤️">❤️</button>
       <button class="join-item btn btn-sm kai btn-outline"
         phx-click="delete-badge" disabled={Map.get(Map.get(@avatars, @focus_id, %{}), "badges", []) == []}>X</button>
     </div>
-    <div class="join">
+    <div class="join pointer-events-auto">
       <button class="join-item btn btn-sm kai btn-outline text-red-500" phx-click="choose-avatar-color" phx-value-filter="hue-rotate(345deg) brightness(99%)">⬤</button>
       <button class="join-item btn btn-sm kai btn-outline text-orange-400" phx-click="choose-avatar-color" phx-value-filter="hue-rotate(59deg) brightness(240%)">⬤</button>
       <button class="join-item btn btn-sm kai btn-outline text-yellow-300" phx-click="choose-avatar-color" phx-value-filter="hue-rotate(67deg) brightness(325%)">⬤</button>
@@ -328,23 +335,19 @@ defmodule MkapsWeb.BoardLive do
     """
   end
 
-  attr :choose_draw_color, :boolean, required: true
   attr :draw_color, :string, required: true
+  attr :draw_colors, :list, required: true
   defp show_draw(assigns) do
     ~H"""
-    <div class="join tooltip tooltip-right" data-tip="啟用繪畫、復原、重做">
-      <%= if @choose_draw_color do %>
-      <button class="join-item btn btn-sm kai btn-outline text-red-500" phx-click="choose-draw-color" phx-value-color="oklch(63.7% 0.237 25.331)">⬤</button>
-      <button class="join-item btn btn-sm kai btn-outline text-orange-400" phx-click="choose-draw-color" phx-value-color="oklch(75% 0.183 55.934)">⬤</button>
-      <button class="join-item btn btn-sm kai btn-outline text-yellow-300" phx-click="choose-draw-color" phx-value-color="oklch(90.5% 0.182 98.111)">⬤</button>
-      <button class="join-item btn btn-sm kai btn-outline text-green-500" phx-click="choose-draw-color" phx-value-color="oklch(72.3% 0.219 149.579)">⬤</button>
-      <button class="join-item btn btn-sm kai btn-outline text-blue-500" phx-click="choose-draw-color" phx-value-color="oklch(62.3% 0.214 259.815)">⬤</button>
-      <button class="join-item btn btn-sm kai btn-outline text-purple-500" phx-click="choose-draw-color" phx-value-color="oklch(62.7% 0.265 303.9)">⬤</button>
+    <div class="join tooltip tooltip-right pointer-events-auto" data-tip="啟用繪畫、復原、重做">
+      <%= if @draw_color do %>
+      <button :for={{css, oklch} <- @draw_colors}
+        class={["join-item btn btn-sm btn-outline", css]}
+        phx-click="choose-draw-color" phx-value-color={oklch}>{if @draw_color == oklch, do: "●", else: "○"}</button>
+      <button class="join-item btn btn-sm btn-outline" phx-click="draw-undo">↶</button>
+      <button class="join-item btn btn-sm btn-outline" phx-click="draw-redo">↷</button>
       <% else %>
-      <button class={"join-item btn btn-sm kai #{if @draw_color, do: "btn-primary", else: "btn-outline"}"}
-        phx-click="choose-draw-color">畫</button>
-      <button class="join-item btn btn-sm kai btn-outline" phx-click="draw-undo">↶</button>
-      <button class="join-item btn btn-sm kai btn-outline" phx-click="draw-redo">↷</button>
+      <button class="join-item btn btn-sm btn-outline text-red-500" phx-click="choose-draw-color" phx-value-color="oklch(63.7% 0.237 25.331)">○</button>
       <% end %>
     </div>
     """
@@ -354,7 +357,7 @@ defmodule MkapsWeb.BoardLive do
   attr :transforms, :map, required: true
   defp show_save_transforms(assigns) do
     ~H"""
-    <div class="join tooltip tooltip-right" data-tip="存取物件位置表">
+    <div class="join tooltip tooltip-right pointer-events-auto" data-tip="存取物件位置表">
       <%= if @transforms_state == :pending do %>
       <button class="join-item btn btn-sm kai btn-outline" phx-click="save-transforms">存</button>
       <button class="join-item btn btn-sm kai btn-outline" phx-click="apply-transforms">用</button>
@@ -390,7 +393,7 @@ defmodule MkapsWeb.BoardLive do
   attr :toggle_images, :boolean, required: true
   defp show_toggle_background_gestures(assigns) do
     ~H"""
-    <div class="join tooltip tooltip-right" data-tip="輕觸背景捲動，或操控所有字/圖">
+    <div class="join tooltip tooltip-right pointer-events-auto" data-tip="輕觸背景捲動，或操控所有字/圖">
       <button class={"join-item btn btn-sm kai #{if @toggle_scroll, do: "btn-primary", else: "btn-outline"}"}
         phx-click="toggle-scroll">捲</button>
       <button class={"join-item btn btn-sm kai #{if @toggle_sentences, do: "btn-primary", else: "btn-outline"}"}
@@ -406,7 +409,7 @@ defmodule MkapsWeb.BoardLive do
   attr :toggle_rotate, :boolean, required: true
   defp show_toggle_gestures(assigns) do
     ~H"""
-    <div class="join tooltip tooltip-right" data-tip="啟用輕觸動作移動、縮放、旋轉">
+    <div class="join tooltip tooltip-right pointer-events-auto" data-tip="啟用輕觸動作移動、縮放、旋轉">
       <button class={"join-item btn btn-sm kai #{if @toggle_pan, do: "btn-primary", else: "btn-outline"}"}
         phx-click="toggle-pan">移</button>
       <button class={"join-item btn btn-sm kai #{if @toggle_zoom, do: "btn-primary", else: "btn-outline"}"}
@@ -423,7 +426,6 @@ defmodule MkapsWeb.BoardLive do
   attr :toggle_sentences, :boolean, required: true
   attr :toggle_images, :boolean, required: true
   attr :transforms_state, :atom, required: true
-  attr :choose_draw_color, :boolean, required: true
   attr :draw_color, :string, required: true
   attr :toggle_pan, :boolean, required: true
   attr :toggle_zoom, :boolean, required: true
@@ -433,6 +435,9 @@ defmodule MkapsWeb.BoardLive do
   attr :slide_position, :integer, required: true
   attr :auto_transforms, :map, required: true
   attr :focus_id, :string, default: nil
+  attr :burger, :boolean, required: true
+  attr :max_seek, :integer, required: true
+  attr :knob, :integer, required: true
   defp show_slide(assigns) do
     ~H"""
     <div id="idle-check" phx-hook="IdleDisconnect"></div>
@@ -469,17 +474,33 @@ defmodule MkapsWeb.BoardLive do
       <.link class="btn btn-circle btn-outline" patch={~p"/lessons/#{@lesson.id}/slides/#{@slide_position-1}"}>&lt;</.link>
       <.link class="btn btn-circle btn-outline" patch={~p"/lessons/#{@lesson.id}/slides/#{@slide_position+1}"}>&gt;</.link>
     </div>
-    <div class="fixed z-9999 bottom-0 left-0 flex flex-col select-none">
+    <%= if @burger do %>
+    <div class="fixed z-9999 bottom-0 left-0 flex flex-col items-start select-none pointer-events-none">
       <.show_avatar_ui :if={@slide && String.starts_with?(@focus_id || "", "avatar-")} avatars={@slide.avatars} focus_id={@focus_id} />
       <.show_save_transforms :if={@slide && @slide.transforms} transforms_state={@transforms_state} transforms={@slide.transforms} />
-      <.show_draw draw_color={@draw_color} choose_draw_color={@choose_draw_color} />
-      <.show_toggle_background_gestures toggle_scroll={@toggle_scroll} toggle_sentences={@toggle_sentences} toggle_images={@toggle_images} />
-      <.show_toggle_gestures toggle_pan={@toggle_pan} toggle_zoom={@toggle_zoom} toggle_rotate={@toggle_rotate} />
-      <div>
+      <.show_toggle_background_gestures :if={@slide} toggle_scroll={@toggle_scroll} toggle_sentences={@toggle_sentences} toggle_images={@toggle_images} />
+      <div class="flex flex-col items-stretch">
+        <div>
+          <.show_toggle_gestures toggle_pan={@toggle_pan} toggle_zoom={@toggle_zoom} toggle_rotate={@toggle_rotate} />
+          <.show_draw draw_color={@draw_color} draw_colors={@draw_colors} />
+        </div>
+        <%= if @draw_color && @max_seek do %>
+        <form phx-change="seek">
+          <input name="knob" type="range" min="0" max={@max_seek} value={@knob} class="range range-info w-full pointer-events-auto" />
+        </form>
+        <% end %>
+      </div>
+      <div class="pointer-events-auto">
+        <button class="btn btn-sm btn-outline" phx-click="toggle-burger">☰</button>
         <.link class="btn btn-sm btn-outline kai" patch={~p"/lessons/#{@lesson.id}/edit"}>編輯</.link>
         <button class="btn btn-sm btn-outline kai" phx-hook="FullScreen" id="fullscreen">全屏</button>
       </div>
     </div>
+    <% else %>
+    <div class="fixed z-9999 bottom-0 left-0 flex flex-col select-none">
+      <button class="btn btn-sm btn-outline" phx-click="toggle-burger">☰</button>
+    </div>
+    <% end %>
     """
   end
 
@@ -579,31 +600,77 @@ defmodule MkapsWeb.BoardLive do
     scroll = not socket.assigns.toggle_scroll
     sentences = not scroll and socket.assigns.toggle_sentences
     images = not scroll and socket.assigns.toggle_images
-    {:noreply, assign(socket, toggle_scroll: scroll, toggle_sentences: sentences, toggle_images: images)}
+    pan = not scroll and socket.assigns.toggle_pan
+    zoom = not scroll and socket.assigns.toggle_zoom
+    rotate = not scroll and socket.assigns.toggle_rotate
+    draw_color = if scroll, do: nil, else: socket.assigns.draw_color
+    {:noreply,
+     socket
+     |> assign(toggle_scroll: scroll, toggle_sentences: sentences, toggle_images: images)
+     |> assign(toggle_pan: pan, toggle_zoom: zoom, toggle_rotate: rotate)
+     |> assign(draw_color: draw_color)}
   end
 
   def handle_event("toggle-sentences", _params, socket) do
     sentences = not socket.assigns.toggle_sentences
     scroll = not sentences and socket.assigns.toggle_scroll
-    {:noreply, assign(socket, toggle_scroll: scroll, toggle_sentences: sentences)}
+    draw_color = if sentences, do: nil, else: socket.assigns.draw_color
+    {:noreply,
+     socket
+     |> assign(toggle_scroll: scroll, toggle_sentences: sentences)
+     |> assign(draw_color: draw_color)}
   end
 
   def handle_event("toggle-images", _params, socket) do
     images = not socket.assigns.toggle_images
     scroll = not images and socket.assigns.toggle_scroll
-    {:noreply, assign(socket, toggle_scroll: scroll, toggle_images: images)}
+    draw_color = if images, do: nil, else: socket.assigns.draw_color
+    {:noreply,
+     socket
+     |> assign(toggle_scroll: scroll, toggle_images: images)
+     |> assign(draw_color: draw_color)}
+  end
+
+  def handle_event("toggle-pan", _params, socket) do
+    pan = not socket.assigns.toggle_pan
+    zoom = pan and socket.assigns.toggle_zoom
+    rotate = zoom and socket.assigns.toggle_rotate
+    {:noreply,
+     socket
+     |> assign(toggle_pan: pan, toggle_zoom: zoom, toggle_rotate: rotate)
+     |> assign(toggle_scroll: false)
+     |> assign(draw_color: nil)}
+  end
+
+  def handle_event("toggle-zoom", _params, socket) do
+    zoom = not socket.assigns.toggle_zoom
+    pan = zoom or socket.assigns.toggle_pan
+    rotate = zoom and socket.assigns.toggle_rotate
+    {:noreply,
+     socket
+     |> assign(toggle_pan: pan, toggle_zoom: zoom, toggle_rotate: rotate)
+     |> assign(toggle_scroll: false)
+     |> assign(draw_color: nil)}
+  end
+
+  def handle_event("toggle-rotate", _params, socket) do
+    rotate = not socket.assigns.toggle_rotate
+    zoom = rotate or socket.assigns.toggle_zoom
+    pan = rotate or socket.assigns.toggle_pan
+    {:noreply,
+     socket
+     |> assign(toggle_pan: pan, toggle_zoom: zoom, toggle_rotate: rotate)
+     |> assign(toggle_scroll: false)
+     |> assign(draw_color: nil)}
   end
 
   def handle_event("choose-draw-color", %{"color" => color}, socket) do
     {:noreply,
      socket
      |> assign(toggle_pan: false, toggle_zoom: false, toggle_rotate: false)
+     |> assign(toggle_scroll: false, toggle_sentences: false, toggle_images: false)
      |> assign(draw_color: color)
-     |> assign(choose_draw_color: false)}
-  end
-
-  def handle_event("choose-draw-color", _params, socket) do
-    {:noreply, assign(socket, choose_draw_color: true)}
+     |> assign(focus_id: nil)}
   end
 
   def handle_event("draw-undo", _params, socket) do
@@ -614,25 +681,20 @@ defmodule MkapsWeb.BoardLive do
     {:noreply, push_event(socket, "redo", %{})}
   end
 
-  def handle_event("toggle-pan", _params, socket) do
-    pan = not socket.assigns.toggle_pan
-    zoom = pan and socket.assigns.toggle_zoom
-    rotate = zoom and socket.assigns.toggle_rotate
-    {:noreply, assign(socket, draw_color: nil, toggle_pan: pan, toggle_zoom: zoom, toggle_rotate: rotate)}
+  def handle_event("seeked", %{"knob" => knob, "max_seek" => max_seek}, socket) do
+    {:noreply, assign(socket, knob: knob, max_seek: max_seek)}
   end
 
-  def handle_event("toggle-zoom", _params, socket) do
-    zoom = not socket.assigns.toggle_zoom
-    pan = zoom or socket.assigns.toggle_pan
-    rotate = zoom and socket.assigns.toggle_rotate
-    {:noreply, assign(socket, draw_color: nil, toggle_pan: pan, toggle_zoom: zoom, toggle_rotate: rotate)}
+  def handle_event("seeked", %{"knob" => knob}, socket) do
+    {:noreply, assign(socket, knob: knob)}
   end
 
-  def handle_event("toggle-rotate", _params, socket) do
-    rotate = not socket.assigns.toggle_rotate
-    zoom = rotate or socket.assigns.toggle_zoom
-    pan = rotate or socket.assigns.toggle_pan
-    {:noreply, assign(socket, draw_color: nil, toggle_pan: pan, toggle_zoom: zoom, toggle_rotate: rotate)}
+  def handle_event("seek", %{"knob" => knob}, socket) do
+    {:noreply, push_event(socket, "seek", %{"knob" => knob})}
+  end
+
+  def handle_event("toggle-burger", _params, socket) do
+    {:noreply, update(socket, :burger, &(not &1))}
   end
 
   def handle_event("save-transforms", %{"slot" => slot}, socket) do
@@ -820,7 +882,7 @@ defmodule MkapsWeb.BoardLive do
   end
 
   def handle_event("idle_disconnect", _params, socket) do
-    {:noreply, push_navigate(socket, to: "/assets/idle.html")}
+    {:noreply, push_navigate(socket, to: "/idle.html")}
   end
 
   defp decode_transforms(params) do
