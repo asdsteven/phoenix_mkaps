@@ -10,7 +10,7 @@ defmodule MkapsWeb.BoardLive do
      socket
      |> assign(highlights: MapSet.new())
      |> assign(image_frames: %{})
-     |> assign(toggle_scroll: false, toggle_sentences: false, toggle_images: false)
+     |> assign(toggle_scroll: false, toggle_sentences: false, toggle_images: false, toggle_strokes: false)
      |> assign(transforms_state: :pending)
      |> assign(toggle_pan: true, toggle_zoom: false, toggle_rotate: false)
      |> assign(lesson: nil)
@@ -101,8 +101,11 @@ defmodule MkapsWeb.BoardLive do
      |> assign(transforms_state: :pending)
      |> assign(focus_id: nil)
      |> assign(draw_color: nil)
-     |> assign(burger: true)
+     |> assign(stroke_width: 30)
+     |> assign(burger_left: true)
+     |> assign(burger_right: false)
      |> assign(knob: nil)
+     |> assign(knobs: nil)
      |> assign(max_seek: nil)
      |> push_event("redraw", %{})}
   end
@@ -144,6 +147,7 @@ defmodule MkapsWeb.BoardLive do
     <div id="idle-check" phx-hook="IdleDisconnect"></div>
     <div class="breadcrumbs">
       <ul>
+        <li><.link patch={~p"/avatars"}>Avatar Pro</.link></li>
         <li>Lessons</li>
       </ul>
     </div>
@@ -192,6 +196,7 @@ defmodule MkapsWeb.BoardLive do
     <div id="idle-check" phx-hook="IdleDisconnect"></div>
     <div class="breadcrumbs">
       <ul>
+        <li><.link patch={~p"/avatars"}>Avatar Pro</.link></li>
         <li><.link patch={~p"/lessons"}>Lessons</.link></li>
         <li>Edit lesson</li>
       </ul>
@@ -239,7 +244,7 @@ defmodule MkapsWeb.BoardLive do
           deco == "紫" && "px-[0.3em] py-[0.1em] inline-block rounded-full text-purple-900 bg-purple-400",
           deco == "灰" && "px-[0.3em] py-[0.1em] inline-block rounded-full text-zinc-900 bg-zinc-400"]}>
         <%= if deco == "網" do %>
-        <a class="link link-primary" draggable="false" target="_blank" href={Enum.join(grapheme_group)}>{Enum.join(grapheme_group)}</a>
+        <.link class="link link-primary" draggable="false" patch={Enum.join(grapheme_group)}>{Enum.join(grapheme_group)}</.link>
         <% else %>
         <span :for={{grapheme, k} <- Enum.with_index(grapheme_group)}
           :if={grapheme != " "}
@@ -320,8 +325,12 @@ defmodule MkapsWeb.BoardLive do
       <button class="join-item btn btn-sm kai btn-outline" phx-click="add-badge" phx-value-badge="👍">👍</button>
       <button class="join-item btn btn-sm kai btn-outline" phx-click="add-badge" phx-value-badge="⭐">⭐</button>
       <button class="join-item btn btn-sm kai btn-outline" phx-click="add-badge" phx-value-badge="❤️">❤️</button>
+      <button class="join-item btn btn-sm kai btn-outline" phx-click="add-badge" phx-value-badge="⌛">⌛</button>
+      <button class="join-item btn btn-sm kai btn-outline" phx-click="add-badge" phx-value-badge="🟨">🟨</button>
+      <button class="join-item btn btn-sm kai btn-outline" phx-click="add-badge" phx-value-badge="🟧">🟧</button>
+      <button class="join-item btn btn-sm kai btn-outline" phx-click="add-badge" phx-value-badge="🟥">🟥</button>
       <button class="join-item btn btn-sm kai btn-outline"
-        phx-click="delete-badge" disabled={Map.get(Map.get(@avatars, @focus_id, %{}), "badges", []) == []}>X</button>
+        phx-click="delete-badge" disabled={Map.get(Map.get(@avatars, @focus_id, %{}), "badges", []) == []}>⌫</button>
     </div>
     <div class="join pointer-events-auto">
       <button class="join-item btn btn-sm kai btn-outline text-red-500" phx-click="choose-avatar-color" phx-value-filter="hue-rotate(345deg) brightness(99%)">⬤</button>
@@ -337,6 +346,7 @@ defmodule MkapsWeb.BoardLive do
 
   attr :draw_color, :string, required: true
   attr :draw_colors, :list, required: true
+  attr :stroke_width, :integer, required: true
   attr :max_seek, :integer, required: true
   attr :knob, :integer, required: true
   defp show_draw(assigns) do
@@ -346,6 +356,12 @@ defmodule MkapsWeb.BoardLive do
       <button :for={{css, oklch} <- @draw_colors}
         class={["join-item btn btn-sm btn-outline", css]}
         phx-click="choose-draw-color" phx-value-color={oklch}>{if @draw_color == oklch, do: "●", else: "○"}</button>
+      <button class={["join-item btn btn-sm btn-outline kai", @stroke_width == 80 && "btn-primary"]}
+        phx-click="choose-stroke-width" phx-value-width="80">粗</button>
+      <button class={["join-item btn btn-sm btn-outline kai", @stroke_width == 50 && "btn-primary"]}
+        phx-click="choose-stroke-width" phx-value-width="50">中</button>
+      <button class={["join-item btn btn-sm btn-outline kai", @stroke_width == 30 && "btn-primary"]}
+        phx-click="choose-stroke-width" phx-value-width="30">幼</button>
       <button class="join-item btn btn-sm btn-outline" phx-click="draw-undo" disabled={!@knob || @knob == 0}>↶</button>
       <button class="join-item btn btn-sm btn-outline" phx-click="draw-redo" disabled={!@knob || @knob == @max_seek}>↷</button>
       <% else %>
@@ -393,6 +409,7 @@ defmodule MkapsWeb.BoardLive do
   attr :toggle_scroll, :boolean, required: true
   attr :toggle_sentences, :boolean, required: true
   attr :toggle_images, :boolean, required: true
+  attr :toggle_strokes, :boolean, required: true
   defp show_toggle_background_gestures(assigns) do
     ~H"""
     <div class="join tooltip tooltip-right pointer-events-auto" data-tip="輕觸背景捲動，或操控所有字/圖">
@@ -402,6 +419,8 @@ defmodule MkapsWeb.BoardLive do
         phx-click="toggle-sentences">字</button>
       <button class={"join-item btn btn-sm kai #{if @toggle_images, do: "btn-primary", else: "btn-outline"}"}
         phx-click="toggle-images">圖</button>
+      <button class={"join-item btn btn-sm kai #{if @toggle_strokes, do: "btn-primary", else: "btn-outline"}"}
+        phx-click="toggle-strokes">筆</button>
     </div>
     """
   end
@@ -422,13 +441,80 @@ defmodule MkapsWeb.BoardLive do
     """
   end
 
+  attr :toggle_scroll, :boolean, required: true
+  attr :toggle_sentences, :boolean, required: true
+  attr :toggle_images, :boolean, required: true
+  attr :toggle_strokes, :boolean, required: true
+  attr :transforms_state, :atom, required: true
+  attr :draw_color, :string, required: true
+  attr :draw_colors, :list, required: true
+  attr :stroke_width, :integer, required: true
+  attr :toggle_pan, :boolean, required: true
+  attr :toggle_zoom, :boolean, required: true
+  attr :toggle_rotate, :boolean, required: true
+  attr :lesson, Lesson, required: true
+  attr :slide, Slide, default: nil
+  attr :slide_position, :integer, required: true
+  attr :focus_id, :string, default: nil
+  attr :burger, :boolean, required: true
+  attr :left, :boolean, required: true
+  attr :max_seek, :integer, required: true
+  attr :knob, :integer, required: true
+  attr :knobs, :list, required: true
+  defp show_burger(assigns) do
+    ~H"""
+    <%= if @burger do %>
+    <.show_avatar_ui :if={@slide && String.starts_with?(@focus_id || "", "avatar-")} avatars={@slide.avatars} focus_id={@focus_id} />
+    <.show_save_transforms :if={@slide && @slide.transforms} transforms_state={@transforms_state} transforms={@slide.transforms} />
+    <.show_toggle_background_gestures :if={@slide} toggle_scroll={@toggle_scroll} toggle_sentences={@toggle_sentences} toggle_images={@toggle_images} toggle_strokes={@toggle_strokes} />
+    <div class="flex flex-col items-stretch">
+      <div class={["flex", @left && "flex-row-reverse"]}>
+        <.show_draw draw_color={@draw_color} draw_colors={@draw_colors} stroke_width={@stroke_width} max_seek={@max_seek} knob={@knob} />
+        <.show_toggle_gestures toggle_pan={@toggle_pan} toggle_zoom={@toggle_zoom} toggle_rotate={@toggle_rotate} />
+      </div>
+      <%= if @draw_color && @knob do %>
+      <form phx-change="seek">
+        <input name="knob" type="range" min="0" max={@max_seek} value={@knob} class="range range-info w-full pointer-events-auto" />
+      </form>
+      <div class="pointer-events-auto">
+        <button :for={{[knob, oklch], i} <- Enum.with_index(@knobs)}
+          class={["btn btn-xs btn-circle btn-outline align-top", i > 0 && "absolute",
+            Enum.find_value(@draw_colors, fn {c, o} -> if o == oklch, do: c, else: nil end)]}
+          style={"left:#{100 * knob / @max_seek}%"}
+          phx-value-knob={knob}
+          phx-click="play">{i+1}</button>
+      </div>
+      <% end %>
+    </div>
+    <div class="pointer-events-auto flex">
+      <.link class="btn btn-sm btn-outline kai" patch={~p"/lessons/#{@lesson.id}/edit"}>編輯</.link>
+      <button class="btn btn-sm btn-outline kai" phx-hook="FullScreen" id="fullscreen">全屏</button>
+      <button class={["btn btn-sm btn-outline", @left && "order-first"]} phx-click="toggle-burger" phx-value-left={@left}>☰</button>
+    </div>
+    <% else %>
+    <div class="pointer-events-auto">
+      <button class="btn btn-sm btn-outline" phx-click="toggle-burger" phx-value-left={@left}>☰</button>
+    </div>
+    <% end %>
+    <%= if not @left do %>
+    <div class="pointer-events-auto">
+      <.link class="btn btn-circle btn-outline" patch={~p"/lessons/#{@lesson.id}/slides/#{@slide_position-1}"}>&lt;</.link>
+      <.link class="btn btn-circle btn-outline" patch={~p"/lessons/#{@lesson.id}/slides/#{@slide_position+1}"}>&gt;</.link>
+    </div>
+    <% end %>
+    """
+  end
+
   attr :highlights, :map, required: true
   attr :image_frames, :map, required: true
   attr :toggle_scroll, :boolean, required: true
   attr :toggle_sentences, :boolean, required: true
   attr :toggle_images, :boolean, required: true
+  attr :toggle_strokes, :boolean, required: true
   attr :transforms_state, :atom, required: true
   attr :draw_color, :string, required: true
+  attr :draw_colors, :list, required: true
+  attr :stroke_width, :integer, required: true
   attr :toggle_pan, :boolean, required: true
   attr :toggle_zoom, :boolean, required: true
   attr :toggle_rotate, :boolean, required: true
@@ -437,7 +523,8 @@ defmodule MkapsWeb.BoardLive do
   attr :slide_position, :integer, required: true
   attr :auto_transforms, :map, required: true
   attr :focus_id, :string, default: nil
-  attr :burger, :boolean, required: true
+  attr :burger_left, :boolean, required: true
+  attr :burger_right, :boolean, required: true
   attr :max_seek, :integer, required: true
   attr :knob, :integer, required: true
   defp show_slide(assigns) do
@@ -447,6 +534,7 @@ defmodule MkapsWeb.BoardLive do
       @toggle_scroll && "mkaps-toggle-scroll",
       @toggle_sentences && "mkaps-toggle-sentences",
       @toggle_images && "mkaps-toggle-images",
+      @toggle_strokes && "mkaps-toggle-strokes",
       @toggle_pan && "mkaps-toggle-pan",
       @toggle_zoom && "mkaps-toggle-zoom",
       @toggle_rotate && "mkaps-toggle-rotate",
@@ -457,7 +545,8 @@ defmodule MkapsWeb.BoardLive do
         id="static-canvas" width="3840" height="2160" style="image-rendering:pixelated"></canvas>
       <canvas class={["absolute size-full z-9999", !@draw_color && "pointer-events-none"]}
         phx-hook="Canvas" id="canvas" width="3840" height="2160" style="image-rendering:pixelated"
-        data-color={@draw_color} data-slide-id={@slide && @slide.id}></canvas>
+        data-color={@draw_color} data-slide-id={@slide && @slide.id}
+        data-stroke-width={@stroke_width} data-dr="1" data-dx="0" data-dy="0"></canvas>
       <.show_sentences :if={@slide && @slide.sentences} sentences={@slide.sentences}
         transforms={Map.get(@slide.transforms || %{}, "", %{})} auto_transforms={@auto_transforms}
         slide_id={@slide.id} highlights={@highlights} />
@@ -468,41 +557,32 @@ defmodule MkapsWeb.BoardLive do
         transforms={Map.get(@slide.transforms || %{}, "", %{})} auto_transforms={@auto_transforms} />
     </div>
     <div class="fixed z-9999 bottom-0 left-1/2 transform -translate-x-1/2 join select-none">
+      <button :if={@slide_position < Enum.at(@lesson.slides, 0).position}
+        class="join-item btn btn-xs btn-outline btn-dash btn-error">{@slide_position}</button>
       <.link :for={slide <- @lesson.slides}
         class={["join-item btn btn-xs btn-outline", slide.position == @slide_position && "btn-primary"]}
         patch={~p"/lessons/#{@lesson.id}/slides/#{slide.position}"}>{slide.position}</.link>
+      <button :if={@slide_position > Enum.at(@lesson.slides, -1).position}
+        class="join-item btn btn-xs btn-outline btn-dash btn-error">{@slide_position}</button>
     </div>
-    <div class="fixed z-9999 bottom-0 right-0 select-none">
-      <.link class="btn btn-circle btn-outline" patch={~p"/lessons/#{@lesson.id}/slides/#{@slide_position-1}"}>&lt;</.link>
-      <.link class="btn btn-circle btn-outline" patch={~p"/lessons/#{@lesson.id}/slides/#{@slide_position+1}"}>&gt;</.link>
+    <div class="fixed z-9999 bottom-0 right-0 flex flex-col items-end select-none pointer-events-none">
+      <.show_burger toggle_scroll={@toggle_scroll} toggle_sentences={@toggle_sentences} toggle_images={@toggle_images} toggle_strokes={@toggle_strokes}
+        transforms_state={@transforms_state} draw_color={@draw_color} draw_colors={@draw_colors} stroke_width={@stroke_width}
+        toggle_pan={@toggle_pan} toggle_zoom={@toggle_zoom} toggle_rotate={@toggle_rotate}
+        lesson={@lesson} slide={@slide} slide_position={@slide_position}
+        focus_id={@focus_id}
+        burger={@burger_right} left={false}
+        max_seek={@max_seek} knob={@knob} knobs={@knobs} />
     </div>
-    <%= if @burger do %>
     <div class="fixed z-9999 bottom-0 left-0 flex flex-col items-start select-none pointer-events-none">
-      <.show_avatar_ui :if={@slide && String.starts_with?(@focus_id || "", "avatar-")} avatars={@slide.avatars} focus_id={@focus_id} />
-      <.show_save_transforms :if={@slide && @slide.transforms} transforms_state={@transforms_state} transforms={@slide.transforms} />
-      <.show_toggle_background_gestures :if={@slide} toggle_scroll={@toggle_scroll} toggle_sentences={@toggle_sentences} toggle_images={@toggle_images} />
-      <div class="flex flex-col items-stretch">
-        <div>
-          <.show_toggle_gestures toggle_pan={@toggle_pan} toggle_zoom={@toggle_zoom} toggle_rotate={@toggle_rotate} />
-          <.show_draw draw_color={@draw_color} draw_colors={@draw_colors} max_seek={@max_seek} knob={@knob} />
-        </div>
-        <%= if @draw_color && @knob do %>
-        <form phx-change="seek">
-          <input name="knob" type="range" min="0" max={@max_seek} value={@knob} class="range range-info w-full pointer-events-auto" />
-        </form>
-        <% end %>
-      </div>
-      <div class="pointer-events-auto">
-        <button class="btn btn-sm btn-outline" phx-click="toggle-burger">☰</button>
-        <.link class="btn btn-sm btn-outline kai" patch={~p"/lessons/#{@lesson.id}/edit"}>編輯</.link>
-        <button class="btn btn-sm btn-outline kai" phx-hook="FullScreen" id="fullscreen">全屏</button>
-      </div>
+      <.show_burger toggle_scroll={@toggle_scroll} toggle_sentences={@toggle_sentences} toggle_images={@toggle_images} toggle_strokes={@toggle_strokes}
+        transforms_state={@transforms_state} draw_color={@draw_color} draw_colors={@draw_colors} stroke_width={@stroke_width}
+        toggle_pan={@toggle_pan} toggle_zoom={@toggle_zoom} toggle_rotate={@toggle_rotate}
+        lesson={@lesson} slide={@slide} slide_position={@slide_position}
+        focus_id={@focus_id}
+        burger={@burger_left} left={true}
+        max_seek={@max_seek} knob={@knob} knobs={@knobs} />
     </div>
-    <% else %>
-    <div class="fixed z-9999 bottom-0 left-0 flex flex-col select-none">
-      <button class="btn btn-sm btn-outline" phx-click="toggle-burger">☰</button>
-    </div>
-    <% end %>
     """
   end
 
@@ -602,34 +682,51 @@ defmodule MkapsWeb.BoardLive do
     scroll = not socket.assigns.toggle_scroll
     sentences = not scroll and socket.assigns.toggle_sentences
     images = not scroll and socket.assigns.toggle_images
+    strokes = not scroll and socket.assigns.toggle_strokes
     pan = not scroll and socket.assigns.toggle_pan
     zoom = not scroll and socket.assigns.toggle_zoom
     rotate = not scroll and socket.assigns.toggle_rotate
     draw_color = if scroll, do: nil, else: socket.assigns.draw_color
     {:noreply,
      socket
-     |> assign(toggle_scroll: scroll, toggle_sentences: sentences, toggle_images: images)
+     |> assign(toggle_scroll: scroll, toggle_sentences: sentences, toggle_images: images, toggle_strokes: strokes)
      |> assign(toggle_pan: pan, toggle_zoom: zoom, toggle_rotate: rotate)
      |> assign(draw_color: draw_color)}
   end
 
   def handle_event("toggle-sentences", _params, socket) do
     sentences = not socket.assigns.toggle_sentences
+    images = sentences and not socket.assigns.toggle_images and not socket.assigns.toggle_strokes or socket.assigns.toggle_images
+    strokes = sentences and not socket.assigns.toggle_images and not socket.assigns.toggle_strokes or socket.assigns.toggle_strokes
     scroll = not sentences and socket.assigns.toggle_scroll
     draw_color = if sentences, do: nil, else: socket.assigns.draw_color
     {:noreply,
      socket
-     |> assign(toggle_scroll: scroll, toggle_sentences: sentences)
+     |> assign(toggle_scroll: scroll, toggle_sentences: sentences, toggle_images: images, toggle_strokes: strokes)
      |> assign(draw_color: draw_color)}
   end
 
   def handle_event("toggle-images", _params, socket) do
     images = not socket.assigns.toggle_images
+    sentences = images and not socket.assigns.toggle_sentences and not socket.assigns.toggle_strokes or socket.assigns.toggle_sentences
+    strokes = images and not socket.assigns.toggle_sentences and not socket.assigns.toggle_strokes or socket.assigns.toggle_strokes
     scroll = not images and socket.assigns.toggle_scroll
     draw_color = if images, do: nil, else: socket.assigns.draw_color
     {:noreply,
      socket
-     |> assign(toggle_scroll: scroll, toggle_images: images)
+     |> assign(toggle_scroll: scroll, toggle_sentences: sentences, toggle_images: images, toggle_strokes: strokes)
+     |> assign(draw_color: draw_color)}
+  end
+
+  def handle_event("toggle-strokes", _params, socket) do
+    strokes = not socket.assigns.toggle_strokes
+    sentences = strokes and not socket.assigns.toggle_sentences and not socket.assigns.toggle_images or socket.assigns.toggle_sentences
+    images = strokes and not socket.assigns.toggle_sentences and not socket.assigns.toggle_images or socket.assigns.toggle_images
+    scroll = not strokes and socket.assigns.toggle_scroll
+    draw_color = if strokes, do: nil, else: socket.assigns.draw_color
+    {:noreply,
+     socket
+     |> assign(toggle_scroll: scroll, toggle_sentences: sentences, toggle_images: images, toggle_strokes: strokes)
      |> assign(draw_color: draw_color)}
   end
 
@@ -675,6 +772,10 @@ defmodule MkapsWeb.BoardLive do
      |> assign(focus_id: nil)}
   end
 
+  def handle_event("choose-stroke-width", %{"width" => width}, socket) do
+    {:noreply, assign(socket, stroke_width: String.to_integer(width))}
+  end
+
   def handle_event("draw-undo", _params, socket) do
     {:noreply, push_event(socket, "undo", %{})}
   end
@@ -683,8 +784,8 @@ defmodule MkapsWeb.BoardLive do
     {:noreply, push_event(socket, "redo", %{})}
   end
 
-  def handle_event("seeked", %{"knob" => knob, "max_seek" => max_seek}, socket) do
-    {:noreply, assign(socket, knob: knob, max_seek: max_seek)}
+  def handle_event("seeked", %{"knobs" => knobs, "max_seek" => max_seek}, socket) do
+    {:noreply, assign(socket, knob: max_seek, knobs: knobs, max_seek: max_seek)}
   end
 
   def handle_event("seeked", %{"knob" => knob}, socket) do
@@ -695,8 +796,20 @@ defmodule MkapsWeb.BoardLive do
     {:noreply, push_event(socket, "seek", %{"knob" => knob})}
   end
 
+  def handle_event("play", %{"knob" => knob}, socket) do
+    {:noreply, push_event(socket, "play", %{"knob" => knob})}
+  end 
+
+  def handle_event("toggle-burger", %{"left" => _}, socket) do
+    burger_left = not socket.assigns.burger_left
+    burger_right = not burger_left and socket.assigns.burger_right
+    {:noreply, assign(socket, burger_left: burger_left, burger_right: burger_right)}
+  end
+
   def handle_event("toggle-burger", _params, socket) do
-    {:noreply, update(socket, :burger, &(not &1))}
+    burger_right = not socket.assigns.burger_right
+    burger_left = not burger_right and socket.assigns.burger_left
+    {:noreply, assign(socket, burger_left: burger_left, burger_right: burger_right)}
   end
 
   def handle_event("save-transforms", %{"slot" => slot}, socket) do
@@ -844,7 +957,7 @@ defmodule MkapsWeb.BoardLive do
 
   def handle_event("add-badge", %{"badge" => badge}, socket) do
     avatar = Map.get(socket.assigns.slide.avatars || %{}, socket.assigns.focus_id)
-    new_avatar = Map.update(avatar || %{}, "badges", [badge], &([badge | &1]))
+    new_avatar = Map.update(avatar || %{}, "badges", [badge], &(Enum.sort([badge | &1], :desc)))
     avatars = Map.put(socket.assigns.slide.avatars || %{}, socket.assigns.focus_id, new_avatar)
     slide = socket.assigns.slide |> Slide.changeset(%{avatars: avatars}) |> Repo.update!
     Phoenix.PubSub.broadcast_from(Mkaps.PubSub, self(), "slide:#{slide.id}", slide)
@@ -1007,18 +1120,23 @@ defmodule MkapsWeb.BoardLive do
     avatar_rows = Float.ceil(length(avatars) / avatars_per_row)
 
     factor = (1280 - 200) / images_per_row / 100
-    dy = Enum.min([100, (720 - 100) / (sentence_rows + image_rows * factor + avatar_rows)])
-    case layout do
-      "top-bottom" ->
-        %{}
-        |> Map.merge(auto_transform_images(images, images_per_row, image_rows, 1, {100, 0}, {1280 - 200, image_rows * factor * dy}))
-        |> Map.merge(auto_transform_sentences(sentences, words_per_row, sentence_rows, length(images)+1, {100, image_rows * factor * dy}, {1280 - 200, sentence_rows * dy}))
-        |> Map.merge(auto_transform_avatars(avatars, avatars_per_row, avatar_rows, length(sentences)+length(images)+1, {100, (sentence_rows + image_rows * factor) * dy}, {1280 - 200, avatar_rows * dy}))
-      "bottom-top" ->
-        %{}
-        |> Map.merge(auto_transform_sentences(sentences, words_per_row, sentence_rows, 1, {100, 0}, {1280 - 200, sentence_rows * dy}))
-        |> Map.merge(auto_transform_images(images, images_per_row, image_rows, length(sentences)+1, {100, sentence_rows * dy}, {1280 - 200, image_rows * factor * dy}))
-        |> Map.merge(auto_transform_avatars(avatars, avatars_per_row, avatar_rows, length(sentences)+length(images)+1, {100, (sentence_rows + image_rows * factor) * dy}, {1280 - 200, avatar_rows * dy}))
+    total_rows = sentence_rows + image_rows * factor + avatar_rows
+    if total_rows == 0 do
+      %{}
+    else
+      dy = Enum.min([100, (720 - 100) / total_rows])
+      case layout do
+        "top-bottom" ->
+          %{}
+          |> Map.merge(auto_transform_images(images, images_per_row, image_rows, 1, {100, 0}, {1280 - 200, image_rows * factor * dy}))
+          |> Map.merge(auto_transform_sentences(sentences, words_per_row, sentence_rows, length(images)+1, {100, image_rows * factor * dy}, {1280 - 200, sentence_rows * dy}))
+          |> Map.merge(auto_transform_avatars(avatars, avatars_per_row, avatar_rows, length(sentences)+length(images)+1, {100, (sentence_rows + image_rows * factor) * dy}, {1280 - 200, avatar_rows * dy}))
+        "bottom-top" ->
+          %{}
+          |> Map.merge(auto_transform_sentences(sentences, words_per_row, sentence_rows, 1, {100, 0}, {1280 - 200, sentence_rows * dy}))
+          |> Map.merge(auto_transform_images(images, images_per_row, image_rows, length(sentences)+1, {100, sentence_rows * dy}, {1280 - 200, image_rows * factor * dy}))
+          |> Map.merge(auto_transform_avatars(avatars, avatars_per_row, avatar_rows, length(sentences)+length(images)+1, {100, (sentence_rows + image_rows * factor) * dy}, {1280 - 200, avatar_rows * dy}))
+      end
     end
   end
 

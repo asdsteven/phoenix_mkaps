@@ -212,6 +212,8 @@ Hooks.Touchable = {
             el.style.top = `${p.y - (p.originY - p.origins.get(el).y)}px`
           }
         }
+        if (el.matches('.mkaps-toggle-strokes')) {
+        }
       } else {
         el.style.left = `${p.x - (p.originX - p.elX)}px`
         el.style.top = `${p.y - (p.originY - p.elY)}px`
@@ -251,6 +253,8 @@ Hooks.Touchable = {
             e.style.top = `${p.y - Math.round((p.originY - p.origins.get(e).y) * r)}px`
             e.style.width = `${Math.round(p.origins.get(e).size * r)}px`
           }
+        }
+        if (el.matches('.mkaps-toggle-strokes')) {
         }
       } else {
         const len0 = Math.sqrt(Math.pow(p.originX - q.originX, 2) + Math.pow(p.originY - q.originY, 2))
@@ -391,26 +395,26 @@ Hooks.Canvas = {
       const dy = y - prev[2]
       const dist = Math.max(1, Math.sqrt(dx * dx + dy * dy))
       const speed = dist / dt
-      const maxWidth = 30
+      const maxWidth = el.dataset.strokeWidth
       const minWidth = 1
-      const responsiveToSpeed = 0.5
-      const responsiveToDiffuse = 0.3
+      const sensitiveToSpeed = 0.5
+      const sensitiveToDiffuse = 0.3
 
-      const target = minWidth + maxWidth * responsiveToDiffuse / (responsiveToDiffuse + Math.pow(speed, responsiveToSpeed))
+      const target = minWidth + maxWidth * sensitiveToDiffuse / (sensitiveToDiffuse + Math.pow(speed, sensitiveToSpeed))
       if (!prevWidth) return target
-      return 0.3 * prevWidth + 0.7 * target
+      return 0.7 * prevWidth + 0.3 * target
     }
 
     const drawStroke = (ctx, width, prev, [t, x, y]) => {
       if (x == prev[1] && y == prev[2]) {
         ctx.beginPath()
-        ctx.arc(x, y, width / 2, 0, 2 * Math.PI)
+        ctx.arc(x * el.dataset.dr + el.dataset.dx * dpr, y * el.dataset.dr + el.dataset.dy * dpr, width / 2, 0, 2 * Math.PI)
         ctx.fill()
       } else {
         ctx.lineWidth = width
         ctx.beginPath()
-        ctx.moveTo(prev[1], prev[2])
-        ctx.lineTo(x, y)
+        ctx.moveTo(prev[1] * el.dataset.dr + el.dataset.dx * dpr, prev[2] * el.dataset.dr + el.dataset.dy * dpr)
+        ctx.lineTo(x * el.dataset.dr + el.dataset.dx * dpr, y * el.dataset.dr + el.dataset.dy * dpr)
         ctx.stroke()
       }
     }
@@ -418,7 +422,10 @@ Hooks.Canvas = {
     const slideStrokes = new Map()
     const slideKnob = new Map()
 
+    let playPromise = 'ready'
+
     const staticRedraw = () => {
+      playPromise = 'stop'
       staticCtx.clearRect(0, 0, el.width, el.height)
       const knob = slideKnob.get(el.dataset.slideId)
       for (const stroke of slideStrokes.get(el.dataset.slideId) || []) {
@@ -436,6 +443,7 @@ Hooks.Canvas = {
     }
 
     const strokings = new Map()
+    const strokingWidths = new Map()
     let timeout = null
     const diffuse = () => {
       for (const stroke of strokings.values()) {
@@ -443,7 +451,7 @@ Hooks.Canvas = {
         const width = dynamicLineWidth(0, p, [Date.now(), p[1], p[2]])
         ctx.fillStyle = stroke[0][1]
         ctx.beginPath()
-        ctx.arc(p[1], p[2], width / 2, 0, 2 * Math.PI)
+        ctx.arc(p[1] * el.dataset.dr + el.dataset.dx * dpr, p[2] * el.dataset.dr + el.dataset.dy * dpr, width / 2, 0, 2 * Math.PI)
         ctx.fill()
       }
       if (strokings.size) {
@@ -465,7 +473,8 @@ Hooks.Canvas = {
       if (!stroke) return
       const prev = stroke[stroke.length-1]
       const curr = [Date.now(), e.x*dpr, e.y*dpr]
-      const width = dynamicLineWidth(0, prev, curr)
+      const width = dynamicLineWidth(strokingWidths.get(e.pointerId) || 0, prev, curr)
+      strokingWidths.set(e.pointerId, width)
       ctx.strokeStyle = stroke[0][1]
       drawStroke(ctx, width, prev, curr)
       stroke.push(curr)
@@ -486,7 +495,6 @@ Hooks.Canvas = {
           strokes.splice(knob[0] + 1)
         }
       }
-
       const lastStroke = strokes[strokes.length-1]
       if (lastStroke) {
         while (knob && lastStroke[lastStroke.length-1][0] - lastStroke[0][0] > knob[1]) lastStroke.pop()
@@ -495,13 +503,15 @@ Hooks.Canvas = {
       } else {
         stroke[0][0] = stroke[1][0] - 1
       }
-      const maxSeek = stroke[stroke.length-1][0] - stroke[0][0]
-      this.pushEvent('seeked', {knob: maxSeek, max_seek: maxSeek})
-
       strokes.push(stroke)
+      const maxSeek = stroke[stroke.length-1][0] - stroke[0][0]
+      const knobs = strokes.map(s => [s[1][0] - s[0][0], s[0][1]])
+      this.pushEvent('seeked', {knob: maxSeek, knobs: knobs, max_seek: maxSeek})
+
       slideStrokes.set(el.dataset.slideId, strokes)
       slideKnob.delete(el.dataset.slideId)
       strokings.delete(e.pointerId)
+      strokingWidths.delete(e.pointerId)
       staticRedraw()
     }
     window.addEventListener('pointerup', pointerend)
@@ -535,13 +545,56 @@ Hooks.Canvas = {
       const strokes = slideStrokes.get(el.dataset.slideId)
       if (!strokes) return
       let i = 0
-      while (true) {
-        const stroke = strokes[i]
-        if (knob <= stroke[stroke.length-1][0] - stroke[0][0]) break
+      while (i < strokes.length-1) {
+        const stroke = strokes[i+1]
+        if (knob < stroke[1][0] - stroke[0][0]) break
         i++
       }
       slideKnob.set(el.dataset.slideId, [i, knob])
       staticRedraw()
+    })
+    this.handleEvent('play', async ({knob}) => {
+      let timestamp = document.timeline.currentTime
+      let begin = timestamp - knob
+      playPromise = 'ready'
+      const step = (t) => {
+        if (playPromise == 'stop') return
+        if (playPromise == 'ready') {
+          requestAnimationFrame(step)
+          return
+        }
+        timestamp = t
+        playPromise[0]()
+        requestAnimationFrame(step)
+      }
+      requestAnimationFrame(step)
+      while (playPromise != 'stop') {
+        staticCtx.clearRect(0, 0, el.width, el.height)
+        for (const stroke of slideStrokes.get(el.dataset.slideId) || []) {
+          staticCtx.strokeStyle = stroke[0][1]
+          staticCtx.fillStyle = stroke[0][1]
+          let prev = stroke[1]
+          let width = 0
+          for (const [t,x,y] of stroke.slice(2)) {
+            while (timestamp - begin < t - stroke[0][0]) {
+              await new Promise((res, rej) => {
+                if (playPromise == 'stop') {
+                  rej()
+                } else {
+                  playPromise = [res, rej]
+                }
+              })
+            }
+            width = dynamicLineWidth(width, prev, [t,x,y])
+            drawStroke(staticCtx, width, prev, [t, x, y])
+            prev = [t,x,y]
+          }
+        }
+        await new Promise((res) => {
+          setTimeout(res, 1000)
+        })
+        begin = timestamp - knob
+      }
     })
     this.handleEvent('redraw', () => {
       staticRedraw()
