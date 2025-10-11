@@ -260,12 +260,12 @@ Hooks.Touchable = {
         const len0 = Math.sqrt(Math.pow(p.originX - q.originX, 2) + Math.pow(p.originY - q.originY, 2))
         const len1 = Math.sqrt(Math.pow(p.x - q.x, 2) + Math.pow(p.y - q.y, 2))
         if (el.matches('.mkaps-sentence')) {
-          const r = Math.max(30 / p.elSize, Math.min(200 / p.elSize, len1 / len0))
+          const r = Math.max(30 / p.elSize, Math.min(2000 / p.elSize, len1 / len0))
           el.style.left = `${p.x - Math.round((p.originX - p.elX) * r)}px`
           el.style.top = `${p.y - Math.round((p.originY - p.elY) * r)}px`
           el.style.fontSize = `${Math.round(p.elSize * r)}px`
         } else if (el.matches('.mkaps-image') || el.matches('.mkaps-avatar')) {
-          const r = Math.max(100 / p.elSize, Math.min(1080 / p.elSize, len1 / len0))
+          const r = len1 / len0
           el.style.left = `${p.x - Math.round((p.originX - p.elX) * r)}px`
           el.style.top = `${p.y - Math.round((p.originY - p.elY) * r)}px`
           el.style.width = `${Math.round(p.elSize * r)}px`
@@ -422,179 +422,174 @@ Hooks.Canvas = {
     const slideStrokes = new Map()
     const slideKnob = new Map()
 
-    let playPromise = 'ready'
+    let playTimeout = null
+    let repeatTimeout = null
 
     const staticRedraw = () => {
-      playPromise = 'stop'
+      clearTimeout(repeatTimeout)
+      cancelAnimationFrame(playTimeout)
+      playTimeout = null
       staticCtx.clearRect(0, 0, el.width, el.height)
       const knob = slideKnob.get(el.dataset.slideId)
       for (const stroke of slideStrokes.get(el.dataset.slideId) || []) {
-        staticCtx.strokeStyle = stroke[0][1]
-        staticCtx.fillStyle = stroke[0][1]
-        let prev = stroke[1]
+        staticCtx.strokeStyle = stroke.style
+        staticCtx.fillStyle = stroke.style
+        let prev = stroke.txys[0]
         let width = 0
-        for (const [t,x,y] of stroke.slice(2)) {
-          if (knob && knob[1] < t - stroke[0][0]) return
+        for (const [t,x,y] of stroke.txys.slice(1)) {
+          if (knob != undefined && knob < stroke.t0 + t) break
           width = dynamicLineWidth(width, prev, [t,x,y])
-          drawStroke(staticCtx, width, prev, [t, x, y])
+          drawStroke(staticCtx, width, prev, [t,x,y])
           prev = [t,x,y]
         }
       }
     }
 
-    const strokings = new Map()
-    const strokingWidths = new Map()
-    let timeout = null
-    const diffuse = () => {
-      for (const stroke of strokings.values()) {
-        const p = stroke[stroke.length-1]
-        const width = dynamicLineWidth(0, p, [Date.now(), p[1], p[2]])
-        ctx.fillStyle = stroke[0][1]
-        ctx.beginPath()
-        ctx.arc(p[1] * el.dataset.dr + el.dataset.dx * dpr, p[2] * el.dataset.dr + el.dataset.dy * dpr, width / 2, 0, 2 * Math.PI)
-        ctx.fill()
-      }
-      if (strokings.size) {
-        timeout = setTimeout(diffuse, 30)
-      } else {
-        timeout = null
+    const drawingStrokes = new Map()
+    const drawingStrokeWidths = new Map()
+    const diffuseTimeouts = new Map()
+    let latest = null
+    const diffuse = (id) => {
+      diffuseTimeouts.delete(id)
+      if (!drawingStrokes.size) {
         ctx.clearRect(0, 0, el.width, el.height)
+        return
       }
+      const stroke = drawingStrokes.get(id)
+      if (!stroke) return
+      latest = Date.now()
+      const p = stroke.txys[stroke.txys.length-1]
+      const width = dynamicLineWidth(0, p, [latest - stroke.begin, p[1], p[2]])
+      ctx.fillStyle = stroke.style
+      ctx.beginPath()
+      ctx.arc(p[1] * el.dataset.dr + el.dataset.dx * dpr, p[2] * el.dataset.dr + el.dataset.dy * dpr, width / 2, 0, 2 * Math.PI)
+      ctx.fill()
+      diffuseTimeouts.set(id, setTimeout(() => diffuse(id), 30))
     }
 
     const dpr = 3
     el.addEventListener('pointerdown', (e) => {
       if (el.dataset.color === undefined) return
-      strokings.set(e.pointerId, [[null, el.dataset.color], [Date.now(), e.x*dpr, e.y*dpr]])
-      timeout = timeout || setTimeout(diffuse, 0)
+      const stroke = {
+        t0: slideKnob.get(el.dataset.slideId),
+        begin: Date.now(),
+        style: el.dataset.color,
+        txys: [[0, e.x*dpr, e.y*dpr]]
+      }
+      if (stroke.t0 == undefined) {
+        const strokes = slideStrokes.get(el.dataset.slideId) || []
+        stroke.t0 = Math.max(0, ...strokes.map(s => s.t0 + s.txys[s.txys.length-1][0]))
+      }
+      if (latest) stroke.t0 += Math.min(1000, stroke.begin - latest)
+      latest = stroke.begin
+      drawingStrokes.set(e.pointerId, stroke)
+      diffuseTimeouts.set(e.pointerId, setTimeout(() => diffuse(e.pointerId), 30))
     })
     window.addEventListener('pointermove', (e) => {
-      const stroke = strokings.get(e.pointerId)
+      const stroke = drawingStrokes.get(e.pointerId)
       if (!stroke) return
-      const prev = stroke[stroke.length-1]
-      const curr = [Date.now(), e.x*dpr, e.y*dpr]
-      const width = dynamicLineWidth(strokingWidths.get(e.pointerId) || 0, prev, curr)
-      strokingWidths.set(e.pointerId, width)
-      ctx.strokeStyle = stroke[0][1]
+      latest = Date.now()
+      const prev = stroke.txys[stroke.txys.length-1]
+      const curr = [latest - stroke.begin, e.x*dpr, e.y*dpr]
+      stroke.txys.push(curr)
+      ctx.strokeStyle = stroke.style
+      const width = dynamicLineWidth(drawingStrokeWidths.get(e.pointerId) || 0, prev, curr)
+      drawingStrokeWidths.set(e.pointerId, width)
       drawStroke(ctx, width, prev, curr)
-      stroke.push(curr)
-      clearTimeout(timeout)
-      timeout = setTimeout(diffuse, 30)
+      clearTimeout(diffuseTimeouts.get(e.pointerId))
+      diffuseTimeouts.set(e.pointerId, setTimeout(() => diffuse(e.pointerId), 30))
     })
     const pointerend = (e) => {
-      const stroke = strokings.get(e.pointerId)
+      const stroke = drawingStrokes.get(e.pointerId)
       if (!stroke) return
-      stroke.push([Date.now(), e.x*dpr, e.y*dpr])
-
-      const strokes = slideStrokes.get(el.dataset.slideId) || []
-      const knob = slideKnob.get(el.dataset.slideId)
-      if (knob) {
-        if (knob[1] == 0) {
-          strokes.splice(0)
-        } else {
-          strokes.splice(knob[0] + 1)
-        }
-      }
-      const lastStroke = strokes[strokes.length-1]
-      if (lastStroke) {
-        while (knob && lastStroke[lastStroke.length-1][0] - lastStroke[0][0] > knob[1]) lastStroke.pop()
-        const t0 = lastStroke[lastStroke.length-1][0] + 1000
-        stroke[0][0] = Math.max(0, stroke[1][0] - t0) + lastStroke[0][0]
-      } else {
-        stroke[0][0] = stroke[1][0] - 1
-      }
+      drawingStrokes.delete(e.pointerId)
+      drawingStrokeWidths.delete(e.pointerId)
+      latest = Date.now()
+      stroke.txys.push([latest - stroke.begin, e.x*dpr, e.y*dpr])
+      delete stroke.begin
+      if (!slideStrokes.has(el.dataset.slideId)) slideStrokes.set(el.dataset.slideId, [])
+      const strokes = slideStrokes.get(el.dataset.slideId)
       strokes.push(stroke)
-      const maxSeek = stroke[stroke.length-1][0] - stroke[0][0]
-      const knobs = strokes.map(s => [s[1][0] - s[0][0], s[0][1]])
-      this.pushEvent('seeked', {knob: maxSeek, knobs: knobs, max_seek: maxSeek})
-
-      slideStrokes.set(el.dataset.slideId, strokes)
-      slideKnob.delete(el.dataset.slideId)
-      strokings.delete(e.pointerId)
-      strokingWidths.delete(e.pointerId)
+      const knob = slideKnob.get(el.dataset.slideId)
+      const maxSeek = Math.max(...strokes.map(s => s.t0 + s.txys[s.txys.length-1][0]))
+      let knobs = strokes.map(s => [s.t0 + s.txys[0][0], s.style])
+      if (knob == undefined) {
+        this.pushEvent('seeked', {knob: maxSeek, knobs: knobs, max_seek: maxSeek})
+      } else {
+        const knob_ = stroke.t0 + stroke.txys[stroke.txys.length-1][0]
+        slideKnob.set(el.dataset.slideId, knob_)
+        this.pushEvent('seeked', {knob: knob_, knobs: knobs, max_seek: maxSeek})
+      }
       staticRedraw()
     }
     window.addEventListener('pointerup', pointerend)
     window.addEventListener('pointercancel', pointerend)
 
-    this.handleEvent('undo', () => {
-      const strokes = slideStrokes.get(el.dataset.slideId)
-      if (!strokes) return
-      const [i, _t] = slideKnob.get(el.dataset.slideId) || [strokes.length-1, null]
-      let knob = [0, 0]
-      if (i > 0) {
-        const stroke = strokes[i-1]
-        knob = [i-1, stroke[stroke.length-1][0] - stroke[0][0]]
-      }
-      slideKnob.set(el.dataset.slideId, knob)
-      this.pushEvent('seeked', {knob: knob[1]})
-      staticRedraw()
-    })
-    this.handleEvent('redo', () => {
-      const strokes = slideStrokes.get(el.dataset.slideId)
-      if (!strokes) return
-      let [i, t] = slideKnob.get(el.dataset.slideId) || [strokes.length-1, null]
-      if (t > 0) i = Math.min(strokes.length-1, i + 1)
-      const stroke = strokes[i]
-      const knob = [i, stroke[stroke.length-1][0] - stroke[0][0]]
-      slideKnob.set(el.dataset.slideId, knob)
-      this.pushEvent('seeked', {knob: knob[1]})
-      staticRedraw()
-    })
     this.handleEvent('seek', ({knob}) => {
-      const strokes = slideStrokes.get(el.dataset.slideId)
-      if (!strokes) return
-      let i = 0
-      while (i < strokes.length-1) {
-        const stroke = strokes[i+1]
-        if (knob < stroke[1][0] - stroke[0][0]) break
-        i++
-      }
-      slideKnob.set(el.dataset.slideId, [i, knob])
+      latest = null
+      slideKnob.set(el.dataset.slideId, knob)
       staticRedraw()
     })
-    this.handleEvent('play', async ({knob}) => {
-      let timestamp = document.timeline.currentTime
-      let begin = timestamp - knob
-      playPromise = 'ready'
+    this.handleEvent('terminate', () => {
+      const strokes = slideStrokes.get(el.dataset.slideId)
+      if (!strokes) return
+      const knob = slideKnob.get(el.dataset.slideId)
+      if (knob == undefined) return
+      slideKnob.delete(el.dataset.slideId)
+      for (let i = strokes.length-1; i >= 0; i--) {
+        const stroke = strokes[i]
+        if (knob < stroke.t0 + stroke.txys[0][0]) {
+          strokes.splice(i, 1)
+          continue
+        }
+        while (stroke.t0 + stroke.txys[stroke.txys.length-1][0] > knob) stroke.txys.pop()
+      }
+      staticRedraw()
+      const knobs = strokes.map(s => [s.t0 + s.txys[0][0], s.style])
+      this.pushEvent('seeked', {knob: knob, knobs: knobs, max_seek: knob})
+    })
+    this.handleEvent('play', ({knob}) => {
+      const commands = []
+      for (const stroke of slideStrokes.get(el.dataset.slideId) || []) {
+        let prev = stroke.txys[0]
+        let width = 0
+        for (const [t,x,y] of stroke.txys.slice(1)) {
+          width = dynamicLineWidth(width, prev, [t,x,y])
+          commands.push([stroke.t0 + t, stroke.style, width, prev, [t,x,y]])
+          prev = [t,x,y]
+        }
+      }
+      commands.sort((a, b) => a[0] - b[0])
+
+      let i = commands.length
+      let begin = null
+      staticCtx.clearRect(0, 0, el.width, el.height)
       const step = (t) => {
-        if (playPromise == 'stop') return
-        if (playPromise == 'ready') {
-          requestAnimationFrame(step)
-          return
+        if (i == commands.length) {
+          i = 0
+          begin = t - knob
         }
-        timestamp = t
-        playPromise[0]()
-        requestAnimationFrame(step)
-      }
-      requestAnimationFrame(step)
-      while (playPromise != 'stop') {
-        staticCtx.clearRect(0, 0, el.width, el.height)
-        for (const stroke of slideStrokes.get(el.dataset.slideId) || []) {
-          staticCtx.strokeStyle = stroke[0][1]
-          staticCtx.fillStyle = stroke[0][1]
-          let prev = stroke[1]
-          let width = 0
-          for (const [t,x,y] of stroke.slice(2)) {
-            while (timestamp - begin < t - stroke[0][0]) {
-              await new Promise((res, rej) => {
-                if (playPromise == 'stop') {
-                  rej()
-                } else {
-                  playPromise = [res, rej]
-                }
-              })
-            }
-            width = dynamicLineWidth(width, prev, [t,x,y])
-            drawStroke(staticCtx, width, prev, [t, x, y])
-            prev = [t,x,y]
-          }
+        while (i < commands.length && t - begin >= commands[i][0]) {
+          staticCtx.strokeStyle = commands[i][1]
+          staticCtx.fillStyle = commands[i][1]
+          const width = commands[i][2]
+          const prev = commands[i][3]
+          const curr = commands[i][4]
+          drawStroke(staticCtx, width, prev, curr)
+          i++
         }
-        await new Promise((res) => {
-          setTimeout(res, 1000)
-        })
-        begin = timestamp - knob
+        if (i == commands.length) {
+          playTimeout = null
+          repeatTimeout = setTimeout(() => {
+            playTimeout = playTimeout || requestAnimationFrame(step)
+          }, 1000)
+        } else {
+          playTimeout = requestAnimationFrame(step)
+        }
       }
+      clearTimeout(repeatTimeout)
+      cancelAnimationFrame(playTimeout)
+      playTimeout = requestAnimationFrame(step)
     })
     this.handleEvent('redraw', () => {
       staticRedraw()

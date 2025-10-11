@@ -347,8 +347,6 @@ defmodule MkapsWeb.BoardLive do
   attr :draw_color, :string, required: true
   attr :draw_colors, :list, required: true
   attr :stroke_width, :integer, required: true
-  attr :max_seek, :integer, required: true
-  attr :knob, :integer, required: true
   defp show_draw(assigns) do
     ~H"""
     <div class="join tooltip tooltip-right pointer-events-auto" data-tip="啟用繪畫、復原、重做">
@@ -362,8 +360,7 @@ defmodule MkapsWeb.BoardLive do
         phx-click="choose-stroke-width" phx-value-width="50">中</button>
       <button class={["join-item btn btn-sm btn-outline kai", @stroke_width == 30 && "btn-primary"]}
         phx-click="choose-stroke-width" phx-value-width="30">幼</button>
-      <button class="join-item btn btn-sm btn-outline" phx-click="draw-undo" disabled={!@knob || @knob == 0}>↶</button>
-      <button class="join-item btn btn-sm btn-outline" phx-click="draw-redo" disabled={!@knob || @knob == @max_seek}>↷</button>
+      <button class="join-item btn btn-sm btn-outline kai" phx-click="stroke-terminate">截</button>
       <% else %>
       <button class="join-item btn btn-sm btn-outline text-red-500" phx-click="choose-draw-color" phx-value-color="oklch(63.7% 0.237 25.331)">○</button>
       <% end %>
@@ -776,16 +773,12 @@ defmodule MkapsWeb.BoardLive do
     {:noreply, assign(socket, stroke_width: String.to_integer(width))}
   end
 
-  def handle_event("draw-undo", _params, socket) do
-    {:noreply, push_event(socket, "undo", %{})}
+  def handle_event("stroke-terminate", _params, socket) do
+    {:noreply, push_event(socket, "terminate", %{})}
   end
 
-  def handle_event("draw-redo", _params, socket) do
-    {:noreply, push_event(socket, "redo", %{})}
-  end
-
-  def handle_event("seeked", %{"knobs" => knobs, "max_seek" => max_seek}, socket) do
-    {:noreply, assign(socket, knob: max_seek, knobs: knobs, max_seek: max_seek)}
+  def handle_event("seeked", %{"knob" => knob, "knobs" => knobs, "max_seek" => max_seek}, socket) do
+    {:noreply, assign(socket, knob: knob, knobs: knobs, max_seek: max_seek)}
   end
 
   def handle_event("seeked", %{"knob" => knob}, socket) do
@@ -793,7 +786,10 @@ defmodule MkapsWeb.BoardLive do
   end
 
   def handle_event("seek", %{"knob" => knob}, socket) do
-    {:noreply, push_event(socket, "seek", %{"knob" => knob})}
+    {:noreply,
+     socket
+     |> assign(knob: knob)
+     |> push_event("seek", %{"knob" => String.to_integer(knob)})}
   end
 
   def handle_event("play", %{"knob" => knob}, socket) do
