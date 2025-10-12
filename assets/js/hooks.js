@@ -437,7 +437,10 @@ Hooks.Canvas = {
         let prev = stroke.txys[0]
         let width = 0
         for (const [t,x,y] of stroke.txys.slice(1)) {
-          if (knob != undefined && knob < stroke.t0 + t) break
+          if (knob != undefined && knob < stroke.t0 + t) {
+            staticCtx.strokeStyle = "oklch(70.7% 0.022 261.325)"
+            staticCtx.fillStyle = "oklch(70.7% 0.022 261.325)"
+          }
           width = dynamicLineWidth(width, prev, [t,x,y])
           drawStroke(staticCtx, width, prev, [t,x,y])
           prev = [t,x,y]
