@@ -564,24 +564,24 @@ Hooks.Canvas = {
       }
       commands.sort((a, b) => a[0] - b[0])
 
-      staticCtx.clearRect(0, 0, el.width, el.height)
-      for (const stroke of slideStrokes.get(el.dataset.slideId) || []) {
-        staticCtx.strokeStyle = "oklch(70.7% 0.022 261.325)"
-        staticCtx.fillStyle = "oklch(70.7% 0.022 261.325)"
-        let prev = stroke.txys[0]
-        let width = 0
-        for (const [t,x,y] of stroke.txys.slice(1)) {
-          width = dynamicLineWidth(width, prev, [t,x,y])
-          drawStroke(staticCtx, width, prev, [t,x,y])
-          prev = [t,x,y]
-        }
-      }
       let i = commands.length
       let begin = null
       const step = (t) => {
         if (i == commands.length) {
           i = 0
           begin = t - knob
+          staticCtx.clearRect(0, 0, el.width, el.height)
+          for (const stroke of slideStrokes.get(el.dataset.slideId) || []) {
+            staticCtx.strokeStyle = "oklch(70.7% 0.022 261.325)"
+            staticCtx.fillStyle = "oklch(70.7% 0.022 261.325)"
+            let prev = stroke.txys[0]
+            let width = 0
+            for (const [t,x,y] of stroke.txys.slice(1)) {
+              width = dynamicLineWidth(width, prev, [t,x,y])
+              drawStroke(staticCtx, width, prev, [t,x,y])
+              prev = [t,x,y]
+            }
+          }
         }
         while (i < commands.length && t - begin >= commands[i][0]) {
           staticCtx.strokeStyle = commands[i][1]
