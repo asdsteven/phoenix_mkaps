@@ -197,7 +197,7 @@ defmodule MkapsWeb.BoardLive do
       <button class="btn btn-primary" type="submit" disabled={@form.source.changes == %{}}>
         {if @form[:id].value, do: "Save", else: "Create"}
       </button>
-      <button disabled={@form.source.changes != %{} or Enum.any?([:sentences, :images, :transforms, :avatars], &(@form[&1].value && @form[&1].value != ""))}
+      <button disabled={@form.source.changes != %{} or Enum.any?([:sentences, :images, :transforms], &(@form[&1].value && @form[&1].value != "")) or Map.get(@form[:avatars].value || %{}, "names", "") != ""}
         :if={@form[:id].value} class="btn btn-error" type="button" phx-click="delete-slide" phx-value-slide={@form[:id].value}>Delete</button>
       <div :if={@form[:id].value} class="join">
         <button class="join-item btn btn-secondary" type="button" phx-click="move-slide" phx-value-slide={@form[:id].value}>Move</button>
