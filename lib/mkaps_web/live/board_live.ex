@@ -1,6 +1,6 @@
 defmodule MkapsWeb.BoardLive do
   use MkapsWeb, :live_view
-  import Ecto.Query, only: [order_by: 2, preload: 2, where: 2, where: 3, last: 2, first: 2]
+  import Ecto.Query, only: [order_by: 2, preload: 2, where: 2, where: 3, last: 2, first: 2, from: 2]
   alias Mkaps.Lesson
   alias Mkaps.Slide
   alias Mkaps.Repo
@@ -57,9 +57,14 @@ defmodule MkapsWeb.BoardLive do
 
   def handle_params(_params, _uri, socket)
       when socket.assigns.live_action == :index do
+    lesson_has_slides =
+      from l in Lesson,
+           as: :lesson,
+           select: %{id: l.id, has_slides: exists(from s in Mkaps.Slide, where: s.lesson_id == parent_as(:lesson).id)}
     {:noreply,
      socket
      |> assign(lessons: Lesson |> order_by([desc: :position]) |> Repo.all)
+     |> assign(lesson_has_slides: lesson_has_slides |> Repo.all |> Map.new(fn %{id: id, has_slides: has_slides} -> {id, has_slides == 1} end))
      |> assign(lesson_changes: %{})}
   end
 
@@ -119,11 +124,15 @@ defmodule MkapsWeb.BoardLive do
   end
 
   attr :form, :any, required: true
+  attr :change_key, :string, required: true
+  attr :has_slide, :boolean, default: false
   defp index_lesson(assigns) do
     ~H"""
     <.form for={@form} phx-submit="submit-lesson" phx-change="change-lesson" class="m-2">
-      <span :if={@form[:position].value}>{@form[:position].value}</span>
       <input :if={@form[:id].value} type="hidden" name={@form[:id].name} value={@form[:id].value} />
+      <input type="hidden" name="change_key" value={@change_key} />
+      <input type="hidden" name={@form[:position].name} value={@form[:position].value} />
+      <span :if={@form[:id].value} class="text-info-content">{@form[:position].value}</span>
       <div class="join">
         <input class={["join-item input", Map.has_key?(@form.source.changes, :name) && "input-primary"]}
           type="text" placeholder="Lesson name" name={@form[:name].name} value={@form[:name].value} />
@@ -131,6 +140,8 @@ defmodule MkapsWeb.BoardLive do
           {if @form[:id].value, do: "Save", else: "Create"}
         </button>
       </div>
+      <button disabled={@form.source.changes != %{} or @has_slide}
+        :if={@form[:id].value} type="button" class="btn btn-error" type="error" phx-click="delete-lesson" phx-value-lesson={@form[:id].value}>Delete</button>
       <div :if={@form[:id].value} class="join">
         <button type="button" class="join-item btn btn-secondary" phx-click="move-lesson" phx-value-lesson={@form[:id].value}>Move Up</button>
         <.link class="join-item btn btn-secondary" patch={~p"/lessons/#{@form[:id].value}/edit"}>Edit</.link>
@@ -142,6 +153,7 @@ defmodule MkapsWeb.BoardLive do
 
   attr :lessons, :list, required: true
   attr :lesson_changes, :map, required: true
+  attr :lesson_has_slides, :map, required: true
   defp index(assigns) do
     ~H"""
     <div id="idle-check" phx-hook="IdleDisconnect"></div>
@@ -151,38 +163,61 @@ defmodule MkapsWeb.BoardLive do
         <li>Lessons</li>
       </ul>
     </div>
-    <.index_lesson form={to_form(Lesson.changeset(%Lesson{}, Map.get(@lesson_changes, -1, %{})))} />
-    <.index_lesson :for={lesson <- @lessons} form={to_form(Lesson.changeset(lesson, Map.get(@lesson_changes, lesson.id, %{})))} />
+    <%= if length(@lessons) == 0 do %>
+    <.index_lesson change_key="first"
+      form={to_form(Lesson.changeset(%Lesson{position: 1}, Map.get(@lesson_changes, "first", %{})))} />
+    <% end %>
+    <%= for lesson <- @lessons do %>
+    <.index_lesson :if={lesson.id == Enum.at(@lessons, 0).id} change_key={"after-#{lesson.id}"}
+      form={to_form(Lesson.changeset(%Lesson{position: lesson.position+1}, Map.get(@lesson_changes, "after-#{lesson.id}", %{})))} />
+    <.index_lesson change_key={"#{lesson.id}"} has_slide={Map.get(@lesson_has_slides, lesson.id, false)}
+      form={to_form(Lesson.changeset(lesson, Map.get(@lesson_changes, "#{lesson.id}", %{})))} />
+    <% end %>
     """
   end
 
   attr :form, :any, required: true
+  attr :change_key, :string, required: true
   defp edit_slide(assigns) do
     ~H"""
     <.form for={@form} phx-submit="submit-slide" phx-change="change-slide" class="m-2 flex">
-      <span :if={@form[:position].value}>{@form[:position].value}</span>
+      <input type="hidden" name="change_key" value={@change_key} />
       <input type="hidden" name={@form[:lesson_id].name} value={@form[:lesson_id].value} />
+      <input type="hidden" name={@form[:position].name} value={@form[:position].value} />
+      <span :if={@form[:id].value}>{@form[:position].value}</span>
       <input :if={@form[:id].value} type="hidden" name={@form[:id].name} value={@form[:id].value} />
-      <textarea class={["textarea", Map.has_key?(@form.source.changes, :sentences) && "textarea-primary"]}
+      <textarea class={["textarea", Map.has_key?(@form.source.changes, :sentences) && "textarea-primary",
+        !@form[:id].value && @form.source.changes == %{} && "h-fit min-h-fit"]}
+        rows={!@form[:id].value && !Enum.any?([:sentences, :images, :transforms, :avatars], &(Map.has_key?(@form.source.changes, &1))) && 1}
         name={@form[:sentences].name} placeholder="Sentences">{@form[:sentences].value}</textarea>
-      <textarea class={["textarea", Map.has_key?(@form.source.changes, :images) && "textarea-primary"]}
+      <textarea class={["textarea", Map.has_key?(@form.source.changes, :images) && "textarea-primary",
+        !@form[:id].value && @form.source.changes == %{} && "h-fit min-h-fit"]}
+        rows={!@form[:id].value && !Enum.any?([:sentences, :images, :transforms, :avatars], &(Map.has_key?(@form.source.changes, &1))) && 1}
         name={@form[:images].name} placeholder="Images">{@form[:images].value}</textarea>
       <button class="btn btn-primary" type="submit" disabled={@form.source.changes == %{}}>
         {if @form[:id].value, do: "Save", else: "Create"}
       </button>
+      <button disabled={@form.source.changes != %{} or Enum.any?([:sentences, :images, :transforms, :avatars], &(@form[&1].value && @form[&1].value != ""))}
+        :if={@form[:id].value} class="btn btn-error" type="button" phx-click="delete-slide" phx-value-slide={@form[:id].value}>Delete</button>
       <div :if={@form[:id].value} class="join">
         <button class="join-item btn btn-secondary" type="button" phx-click="move-slide" phx-value-slide={@form[:id].value}>Move</button>
         <.link class="join-item btn btn-accent" patch={~p"/lessons/#{@form[:lesson_id].value}/slides/#{@form[:position].value}"}>Play</.link>
       </div>
-      <div :if={@form[:images].value}>
+      <div>
+        <%= if @form[:images].value do %>
         <img :for={image <- String.split(@form[:images].value, "\n")}
           class="h-24 w-auto inline m-1"
           src={Enum.at(String.split(image, " "), 0)} />
+        <% end %>
       </div>
-      <textarea class={["textarea", Map.has_key?(@form.source.changes, :transforms) && "textarea-primary"]}
-        name={@form[:transforms].name} placeholder="Transforms">{Jason.encode!(@form[:transforms].value || %{})}</textarea>
-      <textarea class={["textarea", Map.has_key?(@form.source.changes, :avatars) && "textarea-primary"]}
-        name={@form[:avatars].name} placeholder="Avatars">{Map.get(@form[:avatars].value || %{}, "names") || ""}</textarea>
+      <textarea class={["textarea", Map.has_key?(@form.source.changes, :transforms) && "textarea-primary",
+        !@form[:id].value && @form.source.changes == %{} && "h-fit min-h-fit"]}
+        rows={!@form[:id].value && !Enum.any?([:sentences, :images, :transforms, :avatars], &(Map.has_key?(@form.source.changes, &1))) && 1}
+        name={@form[:transforms].name} placeholder="Transforms">{@form[:transforms].value && Jason.encode!(@form[:transforms].value)}</textarea>
+      <textarea class={["textarea", Map.has_key?(@form.source.changes, :avatars) && "textarea-primary",
+        !@form[:id].value && @form.source.changes == %{} && "h-fit min-h-fit"]}
+        rows={!@form[:id].value && !Enum.any?([:sentences, :images, :transforms, :avatars], &(Map.has_key?(@form.source.changes, &1))) && 1}
+        name={@form[:avatars].name} placeholder="Avatars">{Map.get(@form[:avatars].value || %{}, "names")}</textarea>
     </.form>
     """
   end
@@ -201,8 +236,14 @@ defmodule MkapsWeb.BoardLive do
         <li>Edit lesson</li>
       </ul>
     </div>
-    <.edit_slide :for={slide <- @lesson.slides} form={to_form(Slide.changeset(slide, Map.get(@slide_changes, slide.id, %{})))} />
-    <.edit_slide form={to_form(Slide.changeset(%Slide{lesson_id: @lesson.id}, Map.get(@slide_changes, -1, %{})))} />
+    <.edit_slide change_key={"first-#{@lesson.id}"}
+      form={to_form(Slide.changeset(%Slide{lesson_id: @lesson.id, position: 1}, Map.get(@slide_changes, "first-#{@lesson.id}", %{})))} />
+    <%= for slide <- @lesson.slides do %>
+    <.edit_slide change_key={"#{slide.id}"}
+      form={to_form(Slide.changeset(slide, Map.get(@slide_changes, "#{slide.id}", %{})))} />
+    <.edit_slide change_key={"after-#{slide.id}"}
+      form={to_form(Slide.changeset(%Slide{lesson_id: @lesson.id, position: slide.position+1}, Map.get(@slide_changes, "after-#{slide.id}", %{})))} />
+    <% end %>
     <form phx-submit="submit-image" phx-change="change-image" class="m-2">
       <.live_file_input upload={@uploads.image} class="file-input file-input-primary" />
       <div :for={{_uuid, progress} <- @progresses} class="badge badge-primary">{progress}%</div>
@@ -227,9 +268,10 @@ defmodule MkapsWeb.BoardLive do
   attr :groups, :list, required: true
   defp show_sentence(assigns) do
     ~H"""
-    <div class={["absolute w-max max-w-[1080px] px-[0.4em] py-[0.1em]",
+    <div class={["absolute w-max max-w-[1080px]",
       "text-black leading-[1.1] kai",
       "mkaps-sentence mkaps-drag",
+      length(@groups) > 4 && "px-[0.4em] py-[0.1em]",
       is_plain_text?(@groups) && "rounded-lg bg-stone-100 shadow-sm/100"]}
       phx-hook="Touchable" id={"sentence-#{@i}"}
       style={get_sentence_style(@transforms, @auto_transforms, "sentence-#{@i}")}>
@@ -466,7 +508,7 @@ defmodule MkapsWeb.BoardLive do
     <.show_toggle_background_gestures :if={@slide} toggle_scroll={@toggle_scroll} toggle_sentences={@toggle_sentences} toggle_images={@toggle_images} toggle_strokes={@toggle_strokes} />
     <div class="flex flex-col items-stretch">
       <div class={["flex", @left && "flex-row-reverse"]}>
-        <.show_draw draw_color={@draw_color} draw_colors={@draw_colors} stroke_width={@stroke_width} max_seek={@max_seek} knob={@knob} />
+        <.show_draw draw_color={@draw_color} draw_colors={@draw_colors} stroke_width={@stroke_width} />
         <.show_toggle_gestures toggle_pan={@toggle_pan} toggle_zoom={@toggle_zoom} toggle_rotate={@toggle_rotate} />
       </div>
       <%= if @draw_color && @knob do %>
@@ -583,30 +625,30 @@ defmodule MkapsWeb.BoardLive do
     """
   end
 
-  def handle_event("change-lesson", %{"lesson" => params}, socket) do
+  def handle_event("change-lesson", %{"change_key" => change_key, "lesson" => params}, socket) do
     {:noreply,
      socket
-     |> update(:lesson_changes, &Map.put(&1, String.to_integer(Map.get(params, "id", "-1")), params))}
+     |> update(:lesson_changes, &Map.put(&1, change_key, params))}
   end
 
-  def handle_event("submit-lesson", %{"lesson" => %{"id" => _} = params}, socket) do
+  def handle_event("submit-lesson", %{"change_key" => change_key, "lesson" => %{"id" => _} = params}, socket) do
     id = String.to_integer(params["id"])
     Lesson |> Repo.get!(id) |> Lesson.changeset(params) |> Repo.update!
     {:noreply,
      socket
      |> assign(lessons: Lesson |> order_by([desc: :position]) |> Repo.all)
-     |> update(:lesson_changes, &Map.delete(&1, id))}
+     |> update(:lesson_changes, &Map.delete(&1, change_key))}
   end
 
-  def handle_event("submit-lesson", %{"lesson" => params}, socket) do
+  def handle_event("submit-lesson", %{"change_key" => change_key, "lesson" => params}, socket) do
     {:ok, _} = Repo.transact(fn ->
-      max_pos = Lesson |> Repo.aggregate(:max, :position)
-      %Lesson{} |> Lesson.changeset(Map.put(params, "position", (max_pos || 0)+1)) |> Repo.insert
+      Lesson |> where([l], l.position >= ^params["position"]) |> Repo.update_all(inc: [position: 1])
+      %Lesson{} |> Lesson.changeset(params) |> Repo.insert
     end)
     {:noreply,
      socket
      |> assign(lessons: Lesson |> order_by([desc: :position]) |> Repo.all)
-     |> update(:lesson_changes, &Map.delete(&1, -1))}
+     |> update(:lesson_changes, &Map.delete(&1, change_key))}
   end
 
   def handle_event("move-lesson", %{"lesson" => lesson_id}, socket) do
@@ -621,38 +663,55 @@ defmodule MkapsWeb.BoardLive do
      |> assign(lessons: Lesson |> order_by([desc: :position]) |> Repo.all)}
   end
 
-  def handle_event("change-slide", %{"slide" => params}, socket) do
-    id = String.to_integer(Map.get(params, "id", "-1"))
-    avatars = if id == -1, do: nil, else: Enum.find(socket.assigns.lesson.slides, &(&1.id == id))
-    decode_params = params |> decode_transforms |> decode_avatars(avatars || %{})
+  def handle_event("delete-lesson", %{"lesson" => lesson_id}, socket) do
+    {:ok, _} = Repo.transact(fn ->
+      lesson = Lesson |> Repo.get!(String.to_integer(lesson_id))
+      Lesson |> where([l], l.position > ^lesson.position) |> Repo.update_all(inc: [position: -1])
+      lesson |> Repo.delete
+    end)
     {:noreply,
      socket
-     |> update(:slide_changes, &Map.put(&1, id, decode_params))}
+     |> assign(lessons: Lesson |> order_by([desc: :position]) |> Repo.all)}
   end
 
-  def handle_event("submit-slide", %{"slide" => %{"id" => _} = params}, socket) do
+  def handle_event("change-slide", %{"change_key" => change_key, "slide" => %{"id" => _} = params}, socket) do
+    avatars = Enum.find(socket.assigns.lesson.slides, &(&1.id == String.to_integer(params["id"]))).avatars
+    decode_params = params |> decode_transforms |> decode_avatars(avatars)
+    {:noreply,
+     socket
+     |> update(:slide_changes, &Map.put(&1, change_key, decode_params))}
+  end
+
+  def handle_event("change-slide", %{"change_key" => change_key, "slide" => params}, socket) do
+    decode_params = params |> decode_transforms |> decode_avatars(nil)
+    {:noreply,
+     socket
+     |> update(:slide_changes, &Map.put(&1, change_key, decode_params))}
+  end
+
+  def handle_event("submit-slide", %{"change_key" => change_key, "slide" => %{"id" => _} = params}, socket) do
     id = String.to_integer(params["id"])
     lesson_id = String.to_integer(params["lesson_id"])
     avatars = Enum.find(socket.assigns.lesson.slides, &(&1.id == id)).avatars
-    decode_params = params |> decode_transforms |> decode_avatars(avatars || %{})
+    decode_params = params |> decode_transforms |> decode_avatars(avatars)
     Slide |> Repo.get!(id) |> Slide.changeset(decode_params) |> Repo.update!
     {:noreply,
      socket
      |> assign(lesson: Lesson |> preload(:slides) |> Repo.get!(lesson_id))
-     |> update(:slide_changes, &Map.delete(&1, id))}
+     |> update(:slide_changes, &Map.delete(&1, change_key))}
   end
 
-  def handle_event("submit-slide", %{"slide" => params}, socket) do
+  def handle_event("submit-slide", %{"change_key" => change_key, "slide" => params}, socket) do
     lesson_id = String.to_integer(params["lesson_id"])
     {:ok, _} = Repo.transact(fn ->
-      max_pos = Slide |> where(lesson_id: ^lesson_id) |> Repo.aggregate(:max, :position)
-      decode_params = params |> decode_transforms |> decode_avatars(%{})
-      %Slide{} |> Slide.changeset(Map.put(decode_params, "position", (max_pos || 0)+1)) |> Repo.insert
+      Slide |> where([s], s.lesson_id == ^lesson_id and s.position >= ^params["position"]) |> Repo.update_all(inc: [position: 1])
+      decode_params = params |> decode_transforms |> decode_avatars(nil)
+      %Slide{} |> Slide.changeset(decode_params) |> Repo.insert
     end)
     {:noreply,
      socket
      |> assign(lesson: Lesson |> preload(:slides) |> Repo.get!(lesson_id))
-     |> update(:slide_changes, &Map.delete(&1, -1))}
+     |> update(:slide_changes, &Map.delete(&1, change_key))}
   end
 
   def handle_event("move-slide", %{"slide" => slide_id}, socket) do
@@ -661,6 +720,17 @@ defmodule MkapsWeb.BoardLive do
       slide_prev = Slide |> where(lesson_id: ^slide.lesson_id) |> where([s], s.position < ^slide.position) |> last(:position) |> Repo.one!
       slide |> Slide.changeset(%{position: slide_prev.position}) |> Repo.update!
       slide_prev |> Slide.changeset(%{position: slide.position}) |> Repo.update
+    end)
+    {:noreply,
+     socket
+     |> assign(lesson: Lesson |> preload(:slides) |> Repo.get!(socket.assigns.lesson.id))}
+  end
+
+  def handle_event("delete-slide", %{"slide" => slide_id}, socket) do
+    {:ok, _} = Repo.transact(fn ->
+      slide = Slide |> Repo.get!(String.to_integer(slide_id))
+      Slide |> where([s], s.lesson_id == ^slide.lesson_id and s.position > ^slide.position) |> Repo.update_all(inc: [position: -1])
+      slide |> Repo.delete
     end)
     {:noreply,
      socket
@@ -998,14 +1068,27 @@ defmodule MkapsWeb.BoardLive do
 
   defp decode_transforms(params) do
     case Map.get(params, "transforms", "") do
-      "" -> Map.delete(params, "transforms")
-      transforms -> %{params | "transforms" => Jason.decode!(transforms)}
+      "" -> %{params | "transforms" => nil}
+      "{}" -> %{params | "transforms" => nil}
+      transforms ->
+        case Jason.decode(transforms) do
+          {:ok, decode} -> %{params | "transforms" => decode}
+          {:error, _} -> Map.delete(params, "transforms")
+        end
     end
   end
 
   defp decode_avatars(params, avatars) do
     names = Map.get(params, "avatars")
-    %{params | "avatars" => Map.put(avatars, "names", names)}
+    if names == "" do
+      if avatars == nil do
+        Map.delete(params, "avatars")
+      else
+        %{params | "avatars" => Map.delete(avatars, "names")}
+      end
+    else
+      %{params | "avatars" => Map.put(avatars || %{}, "names", names)}
+    end
   end
 
   defp update_lesson_slide(lesson, slide) do
@@ -1056,10 +1139,11 @@ defmodule MkapsWeb.BoardLive do
 
   defp is_plain_text?([{_groups, nil, _j}]), do: true
   defp is_plain_text?([{_groups, "underline", _j}]), do: true
+  defp is_plain_text?([{_groups, "inline-block", _j}]), do: true
   defp is_plain_text?([{_groups, "網", _j}]), do: true
   defp is_plain_text?([{_groups, _deco, _j}]), do: false
   defp is_plain_text?(_groups), do: true
-  defp is_word?(s), do: String.length(s) <= 4 or not String.contains?(s, [" ", ".", "?","。","？"])
+  defp is_word?(s), do: String.length(s) <= 4 or String.length(s) <= 8 and not String.contains?(s, [" ", ".", "?","。","？"])
 
   defp vertical_per_row(n) do
     cond do
