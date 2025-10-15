@@ -539,17 +539,23 @@ Hooks.Canvas = {
       const knob = slideKnob.get(el.dataset.slideId)
       if (knob == undefined) return
       slideKnob.delete(el.dataset.slideId)
-      for (let i = strokes.length-1; i >= 0; i--) {
-        const stroke = strokes[i]
-        if (knob < stroke.t0 + stroke.txys[0][0]) {
-          strokes.splice(i, 1)
-          continue
+      if (knob == 0) {
+        slideStrokes.delete(el.dataset.slideId)
+        staticRedraw()
+        this.pushEvent('seeked', {knob: null, knobs: null, max_seek: null})
+      } else {
+        for (let i = strokes.length-1; i >= 0; i--) {
+          const stroke = strokes[i]
+          if (knob < stroke.t0 + stroke.txys[0][0]) {
+            strokes.splice(i, 1)
+            continue
+          }
+          while (stroke.t0 + stroke.txys[stroke.txys.length-1][0] > knob) stroke.txys.pop()
         }
-        while (stroke.t0 + stroke.txys[stroke.txys.length-1][0] > knob) stroke.txys.pop()
+        staticRedraw()
+        const knobs = strokes.map(s => [s.t0 + s.txys[0][0], s.style])
+        this.pushEvent('seeked', {knob: knob, knobs: knobs, max_seek: knob})
       }
-      staticRedraw()
-      const knobs = strokes.map(s => [s.t0 + s.txys[0][0], s.style])
-      this.pushEvent('seeked', {knob: knob, knobs: knobs, max_seek: knob})
     })
     this.handleEvent('play', ({knob}) => {
       const commands = []
@@ -606,7 +612,14 @@ Hooks.Canvas = {
       playTimeout = requestAnimationFrame(step)
     })
     this.handleEvent('redraw', () => {
+      const strokes = slideStrokes.get(el.dataset.slideId)
+      if (!strokes) return
+      const maxSeek = Math.max(...strokes.map(s => s.t0 + s.txys[s.txys.length-1][0]))
+      let knob = slideKnob.get(el.dataset.slideId)
+      if (knob == undefined) knob = maxSeek
+      let knobs = strokes.map(s => [s.t0 + s.txys[0][0], s.style])
       staticRedraw()
+      this.pushEvent('seeked', {knob: knob, knobs: knobs, max_seek: maxSeek})
     })
   }
 }
@@ -623,8 +636,8 @@ Hooks.IdleDisconnect = {
     }
 
     resetTimer()
-    window.addEventListener('pointerdown', () => resetTimer())
-    window.addEventListener('pointermove', () => resetTimer())
+    window.addEventListener('pointerdown', resetTimer)
+    window.addEventListener('pointermove', resetTimer)
   }
 }
 

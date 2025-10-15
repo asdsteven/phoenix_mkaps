@@ -115,20 +115,73 @@ defmodule MkapsWeb.BoardLive do
      |> push_event("redraw", %{})}
   end
 
+  def handle_params(_params, _uri, socket)
+      when socket.assigns.live_action == :images do
+    uploaded_image_names =
+      Application.fetch_env!(:mkaps, MkapsWeb.FileLive)[:uploads_path]
+      |> File.ls!
+      |> Enum.map(&("/uploads/#{&1}"))
+      |> MapSet.new
+
+    image_infos =
+      Slide
+      |> preload(:lesson)
+      |> Repo.all
+      |> Enum.map(fn slide ->
+        String.split(slide.images || "", "\n", trim: true)
+        |> Enum.map(fn image ->
+          String.split(image, " ")
+          |> Enum.map(&({&1, "#{slide.lesson.position} #{slide.lesson.name}"}))
+        end)
+        |> Enum.concat
+      end)
+      |> Enum.concat
+      |> Enum.sort_by(&(elem(&1, 0)))
+
+    image_names =
+      image_infos
+      |> Enum.map(&(elem(&1, 0)))
+      |> MapSet.new
+
+    {:noreply,
+     socket
+     |> assign(image_infos: image_infos)
+     |> assign(external_images: MapSet.difference(image_names, uploaded_image_names))
+     |> assign(internal_images: MapSet.intersection(image_names, uploaded_image_names))
+     |> assign(unused_images: MapSet.difference(uploaded_image_names, image_names))}
+  end
+
   def render(assigns) do
     case assigns.live_action do
       :index -> index(assigns)
       :edit -> edit(assigns)
       :show -> show_slide(assigns)
+      :images -> show_images_organizer(assigns)
     end
+  end
+
+  attr :image_infos, :map, required: true
+  attr :external_images, :any, required: true
+  attr :internal_images, :any, required: true
+  attr :unused_images, :any, required: true
+  defp show_images_organizer(assigns) do
+    ~H"""
+    <div>External images</div>
+    <div :for={{image, lesson} <- @image_infos} :if={image in @external_images}>{image} {lesson}</div>
+    <div>Internal images</div>
+    <div :for={{image, lesson} <- @image_infos} :if={image in @internal_images}>{image} {lesson}</div>
+    <div>Unused images</div>
+    <div :for={image <- MapSet.to_list(@unused_images)}>{image}</div>
+    """
   end
 
   attr :form, :any, required: true
   attr :change_key, :string, required: true
   attr :has_slide, :boolean, default: false
+  attr :updated_at, :any, required: true
   defp index_lesson(assigns) do
     ~H"""
-    <.form for={@form} phx-submit="submit-lesson" phx-change="change-lesson" class="m-2">
+    <.form for={@form} phx-submit="submit-lesson" phx-change="change-lesson" class="m-2 flex items-center gap-x-1">
       <input :if={@form[:id].value} type="hidden" name={@form[:id].name} value={@form[:id].value} />
       <input type="hidden" name="change_key" value={@change_key} />
       <input type="hidden" name={@form[:position].name} value={@form[:position].value} />
@@ -146,6 +199,10 @@ defmodule MkapsWeb.BoardLive do
         <button type="button" class="join-item btn btn-secondary" phx-click="move-lesson" phx-value-lesson={@form[:id].value}>Move Up</button>
         <.link class="join-item btn btn-secondary" patch={~p"/lessons/#{@form[:id].value}/edit"}>Edit</.link>
         <.link class="join-item btn btn-accent" patch={~p"/lessons/#{@form[:id].value}/slides/1"}>Play</.link>
+      </div>
+      <div :if={@form[:id].value} class="inline-block text-xs text-center">
+        {@updated_at |> DateTime.add(8 * 3600, :second) |> Calendar.strftime("%Y-%m-%d")}<br>
+        {@updated_at |> DateTime.add(8 * 3600, :second) |> Calendar.strftime("%H:%M:%S")}
       </div>
     </.form>
     """
@@ -168,9 +225,9 @@ defmodule MkapsWeb.BoardLive do
       form={to_form(Lesson.changeset(%Lesson{position: 1}, Map.get(@lesson_changes, "first", %{})))} />
     <% end %>
     <%= for lesson <- @lessons do %>
-    <.index_lesson :if={lesson.id == Enum.at(@lessons, 0).id} change_key={"after-#{lesson.id}"}
+    <.index_lesson :if={lesson.id == Enum.at(@lessons, 0).id} change_key={"after-#{lesson.id}"} updated_at={lesson.updated_at}
       form={to_form(Lesson.changeset(%Lesson{position: lesson.position+1}, Map.get(@lesson_changes, "after-#{lesson.id}", %{})))} />
-    <.index_lesson change_key={"#{lesson.id}"} has_slide={Map.get(@lesson_has_slides, lesson.id, false)}
+    <.index_lesson change_key={"#{lesson.id}"} has_slide={Map.get(@lesson_has_slides, lesson.id, false)} updated_at={lesson.updated_at}
       form={to_form(Lesson.changeset(lesson, Map.get(@lesson_changes, "#{lesson.id}", %{})))} />
     <% end %>
     """
@@ -204,11 +261,9 @@ defmodule MkapsWeb.BoardLive do
         <.link class="join-item btn btn-accent" patch={~p"/lessons/#{@form[:lesson_id].value}/slides/#{@form[:position].value}"}>Play</.link>
       </div>
       <div>
-        <%= if @form[:images].value do %>
-        <img :for={image <- String.split(@form[:images].value, "\n")}
+        <img :for={image <- String.split(@form[:images].value || "", "\n", trim: true)}
           class="h-24 w-auto inline m-1"
           src={Enum.at(String.split(image, " "), 0)} />
-        <% end %>
       </div>
       <textarea class={["textarea", Map.has_key?(@form.source.changes, :transforms) && "textarea-primary",
         !@form[:id].value && @form.source.changes == %{} && "h-fit min-h-fit"]}
@@ -248,7 +303,7 @@ defmodule MkapsWeb.BoardLive do
       <.live_file_input upload={@uploads.image} class="file-input file-input-primary" />
       <div :for={{_uuid, progress} <- @progresses} class="badge badge-primary">{progress}%</div>
     </form>
-    <div>Click one of them to copy image link</div>
+    <div>Click to copy image link</div>
     <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
       <div :for={image <- @uploaded_images}
         class="flex flex-col items-center space-y-2"
@@ -268,16 +323,17 @@ defmodule MkapsWeb.BoardLive do
   attr :groups, :list, required: true
   defp show_sentence(assigns) do
     ~H"""
-    <div class={["absolute w-max max-w-[1080px]",
-      "text-black leading-[1.1] kai",
+    <div class={["absolute w-max max-w-[1080px] text-black leading-[1.1] kai py-[0.1em]",
       "mkaps-sentence mkaps-drag",
-      length(@groups) > 4 && "px-[0.4em] py-[0.1em]",
+      length(@groups) > 4 && "px-[0.4em]",
+      length(@groups) <= 4 && "px-[0.1em]",
       is_plain_text?(@groups) && "rounded-lg bg-stone-100 shadow-sm/100"]}
       phx-hook="Touchable" id={"sentence-#{@i}"}
       style={get_sentence_style(@transforms, @auto_transforms, "sentence-#{@i}")}>
       <span :for={{grapheme_group, deco, j} <- @groups}
         class={["whitespace-nowrap",
           deco == "inline-block" && "inline-block",
+          deco == "underline" && "inline-block",
           deco == "紅" && "px-[0.3em] py-[0.1em] inline-block rounded-full text-pink-900 bg-pink-400",
           deco == "橙" && "px-[0.3em] py-[0.1em] inline-block rounded-full text-orange-900 bg-orange-400",
           deco == "黃" && "px-[0.3em] py-[0.1em] inline-block rounded-full text-amber-900 bg-amber-400",
@@ -311,7 +367,7 @@ defmodule MkapsWeb.BoardLive do
   attr :highlights, :map, required: true
   defp show_sentences(assigns) do
     ~H"""
-    <.show_sentence :for={{sentence, i} <- Enum.with_index(String.split(@sentences, "\n"))}
+    <.show_sentence :for={{sentence, i} <- Enum.with_index(String.split(@sentences, "\n", trim: true))}
       :if={sentence != ""} i={i}
       transforms={@transforms} auto_transforms={@auto_transforms}
       slide_id={@slide_id} highlights={@highlights} groups={with_grapheme_index(grapheme_groups(sentence))} />
@@ -325,7 +381,7 @@ defmodule MkapsWeb.BoardLive do
   attr :image_frames, :map, required: true
   defp show_images(assigns) do
     ~H"""
-    <img :for={{image, i} <- Enum.with_index(String.split(@images, "\n"))}
+    <img :for={{image, i} <- Enum.with_index(String.split(@images, "\n", trim: true))}
       :if={image != ""}
       class="absolute h-auto shadow-sm/100 rounded-lg mkaps-image mkaps-drag"
       draggable="false"
@@ -341,7 +397,7 @@ defmodule MkapsWeb.BoardLive do
   attr :auto_transforms, :map, required: true
   defp show_avatars(assigns) do
     ~H"""
-    <span :for={{name, i} <- Enum.with_index(String.split(Map.get(@avatars, "names", ""), "\n"))}
+    <span :for={{name, i} <- Enum.with_index(String.split(Map.get(@avatars, "names", ""), "\n", trim: true))}
       :if={name != ""}
       class="absolute h-auto mkaps-avatar mkaps-drag"
       phx-hook="Touchable" id={"avatar-#{i}"}
@@ -694,7 +750,10 @@ defmodule MkapsWeb.BoardLive do
     lesson_id = String.to_integer(params["lesson_id"])
     avatars = Enum.find(socket.assigns.lesson.slides, &(&1.id == id)).avatars
     decode_params = params |> decode_transforms |> decode_avatars(avatars)
-    Slide |> Repo.get!(id) |> Slide.changeset(decode_params) |> Repo.update!
+    {:ok, _} = Repo.transact(fn ->
+      Slide |> Repo.get!(id) |> Slide.changeset(decode_params) |> Repo.update!
+      Lesson |> Repo.get!(lesson_id) |> Ecto.Changeset.change(updated_at: DateTime.utc_now() |> DateTime.truncate(:second)) |> Repo.update
+    end)
     {:noreply,
      socket
      |> assign(lesson: Lesson |> preload(:slides) |> Repo.get!(lesson_id))
@@ -706,7 +765,8 @@ defmodule MkapsWeb.BoardLive do
     {:ok, _} = Repo.transact(fn ->
       Slide |> where([s], s.lesson_id == ^lesson_id and s.position >= ^params["position"]) |> Repo.update_all(inc: [position: 1])
       decode_params = params |> decode_transforms |> decode_avatars(nil)
-      %Slide{} |> Slide.changeset(decode_params) |> Repo.insert
+      %Slide{} |> Slide.changeset(decode_params) |> Repo.insert!
+      Lesson |> Repo.get!(lesson_id) |> Ecto.Changeset.change(updated_at: DateTime.utc_now() |> DateTime.truncate(:second)) |> Repo.update
     end)
     {:noreply,
      socket
@@ -719,7 +779,8 @@ defmodule MkapsWeb.BoardLive do
       slide = Slide |> Repo.get!(String.to_integer(slide_id))
       slide_prev = Slide |> where(lesson_id: ^slide.lesson_id) |> where([s], s.position < ^slide.position) |> last(:position) |> Repo.one!
       slide |> Slide.changeset(%{position: slide_prev.position}) |> Repo.update!
-      slide_prev |> Slide.changeset(%{position: slide.position}) |> Repo.update
+      slide_prev |> Slide.changeset(%{position: slide.position}) |> Repo.update!
+      Lesson |> Repo.get!(slide.lesson_id) |> Ecto.Changeset.change(updated_at: DateTime.utc_now() |> DateTime.truncate(:second)) |> Repo.update
     end)
     {:noreply,
      socket
@@ -729,8 +790,9 @@ defmodule MkapsWeb.BoardLive do
   def handle_event("delete-slide", %{"slide" => slide_id}, socket) do
     {:ok, _} = Repo.transact(fn ->
       slide = Slide |> Repo.get!(String.to_integer(slide_id))
+      Lesson |> Repo.get!(slide.lesson_id) |> Ecto.Changeset.change(updated_at: DateTime.utc_now() |> DateTime.truncate(:second)) |> Repo.update!
       Slide |> where([s], s.lesson_id == ^slide.lesson_id and s.position > ^slide.position) |> Repo.update_all(inc: [position: -1])
-      slide |> Repo.delete
+      slide |> Repo.delete!
     end)
     {:noreply,
      socket
@@ -948,7 +1010,7 @@ defmodule MkapsWeb.BoardLive do
 
   def handle_event("flip", %{"image" => "image-" <> i}, socket) do
     slide = socket.assigns.slide
-    image = Enum.at(String.split(slide.images, "\n"), String.to_integer(i))
+    image = Enum.at(String.split(slide.images, "\n", trim: true), String.to_integer(i))
     frames = length(String.split(image, " "))
     image_frames = Map.update(socket.assigns.image_frames, "#{slide.id}-#{i}", rem(1, frames), &(rem(&1 + 1, frames)))
     {:noreply,
@@ -997,7 +1059,7 @@ defmodule MkapsWeb.BoardLive do
 
   def handle_event("toggle-highlight", %{"key" => key}, socket) do
     [slide_id, i, jk] = String.split(key, "-")
-    sentence = Enum.at(String.split(socket.assigns.slide.sentences, "\n"), String.to_integer(i))
+    sentence = Enum.at(String.split(socket.assigns.slide.sentences, "\n", trim: true), String.to_integer(i))
     {group, _deco, j} = Enum.find(with_grapheme_index(grapheme_groups(sentence)), fn {group,_,j} -> String.to_integer(jk) < j+length(group) end)
     indices = 0..(length(group)-1)
     highlight_count = Enum.count(indices, fn k -> "#{slide_id}-#{i}-#{j+k}" in socket.assigns.highlights end)
@@ -1097,6 +1159,26 @@ defmodule MkapsWeb.BoardLive do
   end
 
   defp get_uploaded_images() do
+    image_infos =
+      Slide
+      |> preload(:lesson)
+      |> Repo.all
+      |> Enum.map(fn slide ->
+        String.split(slide.images || "", "\n", trim: true)
+        |> Enum.map(fn image ->
+          String.split(image, " ")
+          |> Enum.map(&({&1, "#{slide.lesson.position} #{slide.lesson.name}"}))
+        end)
+        |> Enum.concat
+      end)
+      |> Enum.concat
+      |> Enum.sort_by(&(elem(&1, 0)))
+
+    image_names =
+      image_infos
+      |> Enum.map(&(elem(&1, 0)))
+      |> MapSet.new
+
     uploads_folder = Application.fetch_env!(:mkaps, MkapsWeb.FileLive)[:uploads_path]
     uploads_folder
     |> File.ls!
@@ -1110,6 +1192,7 @@ defmodule MkapsWeb.BoardLive do
     end)
     |> Enum.sort_by(fn {_file, ctime} -> ctime end, :desc)
     |> Enum.map(fn {file, _ctime} -> file end)
+    |> Enum.filter(&("/uploads/#{&1}" not in image_names))
   end
 
   defp get_sentence_style(active_transforms, auto_transforms, id) do
@@ -1177,13 +1260,10 @@ defmodule MkapsWeb.BoardLive do
     end
   end
 
-  defp ignore_empty([""]), do: []
-  defp ignore_empty(s), do: s
-
   defp auto_transform_vertical(slide, layout) do
-    sentences = ignore_empty(String.split(slide.sentences || "", "\n"))
-    images = ignore_empty(String.split(slide.images || "", "\n"))
-    avatars = ignore_empty(String.split(Map.get(slide.avatars || %{}, "names", ""), "\n"))
+    sentences = String.split(slide.sentences || "", "\n", trim: true)
+    images = String.split(slide.images || "", "\n", trim: true)
+    avatars = String.split(Map.get(slide.avatars || %{}, "names", ""), "\n", trim: true)
 
     words_per_row = 5
     images_per_row = vertical_per_row(length(images))
@@ -1221,9 +1301,9 @@ defmodule MkapsWeb.BoardLive do
   end
 
   defp auto_transform_horizontal(slide, layout) do
-    sentences = ignore_empty(String.split(slide.sentences || "", "\n"))
-    images = ignore_empty(String.split(slide.images || "", "\n"))
-    avatars = ignore_empty(String.split(Map.get(slide.avatars || %{}, "names", ""), "\n"))
+    sentences = String.split(slide.sentences || "", "\n", trim: true)
+    images = String.split(slide.images || "", "\n", trim: true)
+    avatars = String.split(Map.get(slide.avatars || %{}, "names", ""), "\n", trim: true)
 
     words_per_row = 3
     images_per_row = horizontal_per_row(length(images))
