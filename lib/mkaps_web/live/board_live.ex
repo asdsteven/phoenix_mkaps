@@ -106,7 +106,7 @@ defmodule MkapsWeb.BoardLive do
      |> assign(transforms_state: :pending)
      |> assign(focus_id: nil)
      |> assign(draw_color: nil)
-     |> assign(stroke_width: 30)
+     |> assign(stroke_width: 20)
      |> assign(burger_left: true)
      |> assign(burger_right: false)
      |> assign(knob: nil)
@@ -177,7 +177,7 @@ defmodule MkapsWeb.BoardLive do
 
   attr :form, :any, required: true
   attr :change_key, :string, required: true
-  attr :has_slide, :boolean, default: false
+  attr :has_slide, :boolean, required: true
   attr :updated_at, :any, required: true
   defp index_lesson(assigns) do
     ~H"""
@@ -200,7 +200,7 @@ defmodule MkapsWeb.BoardLive do
         <.link class="join-item btn btn-secondary" patch={~p"/lessons/#{@form[:id].value}/edit"}>Edit</.link>
         <.link class="join-item btn btn-accent" patch={~p"/lessons/#{@form[:id].value}/slides/1"}>Play</.link>
       </div>
-      <div :if={@form[:id].value} class="inline-block text-xs text-center">
+      <div :if={@updated_at} class="inline-block text-xs text-center">
         {@updated_at |> DateTime.add(8 * 3600, :second) |> Calendar.strftime("%Y-%m-%d")}<br>
         {@updated_at |> DateTime.add(8 * 3600, :second) |> Calendar.strftime("%H:%M:%S")}
       </div>
@@ -225,7 +225,7 @@ defmodule MkapsWeb.BoardLive do
       form={to_form(Lesson.changeset(%Lesson{position: 1}, Map.get(@lesson_changes, "first", %{})))} />
     <% end %>
     <%= for lesson <- @lessons do %>
-    <.index_lesson :if={lesson.id == Enum.at(@lessons, 0).id} change_key={"after-#{lesson.id}"} updated_at={lesson.updated_at}
+    <.index_lesson :if={lesson.id == Enum.at(@lessons, 0).id} change_key={"after-#{lesson.id}"} has_slide={false} updated_at={nil}
       form={to_form(Lesson.changeset(%Lesson{position: lesson.position+1}, Map.get(@lesson_changes, "after-#{lesson.id}", %{})))} />
     <.index_lesson change_key={"#{lesson.id}"} has_slide={Map.get(@lesson_has_slides, lesson.id, false)} updated_at={lesson.updated_at}
       form={to_form(Lesson.changeset(lesson, Map.get(@lesson_changes, "#{lesson.id}", %{})))} />
@@ -445,6 +445,8 @@ defmodule MkapsWeb.BoardLive do
   attr :draw_color, :string, required: true
   attr :draw_colors, :list, required: true
   attr :stroke_width, :integer, required: true
+  attr :knob, :integer, required: true
+  attr :max_seek, :integer, required: true
   defp show_draw(assigns) do
     ~H"""
     <div class="join tooltip tooltip-right pointer-events-auto" data-tip="啟用繪畫、復原、重做">
@@ -452,13 +454,13 @@ defmodule MkapsWeb.BoardLive do
       <button :for={{css, oklch} <- @draw_colors}
         class={["join-item btn btn-sm btn-outline", css]}
         phx-click="choose-draw-color" phx-value-color={oklch}>{if @draw_color == oklch, do: "●", else: "○"}</button>
-      <button class={["join-item btn btn-sm btn-outline kai", @stroke_width == 80 && "btn-primary"]}
-        phx-click="choose-stroke-width" phx-value-width="80">粗</button>
-      <button class={["join-item btn btn-sm btn-outline kai", @stroke_width == 50 && "btn-primary"]}
-        phx-click="choose-stroke-width" phx-value-width="50">中</button>
-      <button class={["join-item btn btn-sm btn-outline kai", @stroke_width == 30 && "btn-primary"]}
-        phx-click="choose-stroke-width" phx-value-width="30">幼</button>
-      <button class="join-item btn btn-sm btn-outline kai" phx-click="stroke-terminate">截</button>
+      <button :if={@stroke_width == 140} class="join-item btn btn-sm btn-outline kai"
+        phx-click="choose-stroke-width" phx-value-width="20">粗</button>
+      <button :if={@stroke_width == 80} class="join-item btn btn-sm btn-outline kai"
+        phx-click="choose-stroke-width" phx-value-width="140">中</button>
+      <button :if={@stroke_width == 20} class="join-item btn btn-sm btn-outline kai"
+        phx-click="choose-stroke-width" phx-value-width="80">幼</button>
+      <button class="join-item btn btn-sm btn-outline kai" phx-click="stroke-terminate" disabled={!@knob or @knob == @max_seek}>截</button>
       <% else %>
       <button class="join-item btn btn-sm btn-outline text-red-500" phx-click="choose-draw-color" phx-value-color="oklch(63.7% 0.237 25.331)">○</button>
       <% end %>
@@ -564,7 +566,7 @@ defmodule MkapsWeb.BoardLive do
     <.show_toggle_background_gestures :if={@slide} toggle_scroll={@toggle_scroll} toggle_sentences={@toggle_sentences} toggle_images={@toggle_images} toggle_strokes={@toggle_strokes} />
     <div class="flex flex-col items-stretch">
       <div class={["flex", @left && "flex-row-reverse"]}>
-        <.show_draw draw_color={@draw_color} draw_colors={@draw_colors} stroke_width={@stroke_width} />
+        <.show_draw draw_color={@draw_color} draw_colors={@draw_colors} stroke_width={@stroke_width} knob={@knob} max_seek={@max_seek} />
         <.show_toggle_gestures toggle_pan={@toggle_pan} toggle_zoom={@toggle_zoom} toggle_rotate={@toggle_rotate} />
       </div>
       <%= if @draw_color && @knob do %>

@@ -430,14 +430,17 @@ Hooks.Canvas = {
       cancelAnimationFrame(playTimeout)
       playTimeout = null
       staticCtx.clearRect(0, 0, el.width, el.height)
-      const knob = slideKnob.get(el.dataset.slideId)
-      for (const stroke of slideStrokes.get(el.dataset.slideId) || []) {
+      const strokes = slideStrokes.get(el.dataset.slideId)
+      if (!strokes) return
+      let knob = strokes.length
+      if (slideKnob.has(el.dataset.slideId)) knob = slideKnob.get(el.dataset.slideId)
+      for (const [i, stroke] of strokes.entries()) {
         staticCtx.strokeStyle = stroke.style
         staticCtx.fillStyle = stroke.style
         let prev = stroke.txys[0]
         let width = 0
         for (const [t,x,y] of stroke.txys.slice(1)) {
-          if (knob != undefined && knob < stroke.t0 + t) {
+          if (knob <= i) {
             staticCtx.strokeStyle = "oklch(70.7% 0.022 261.325)"
             staticCtx.fillStyle = "oklch(70.7% 0.022 261.325)"
           }
@@ -474,14 +477,19 @@ Hooks.Canvas = {
     el.addEventListener('pointerdown', (e) => {
       if (el.dataset.color === undefined) return
       const stroke = {
-        t0: slideKnob.get(el.dataset.slideId),
+        t0: 0,
         begin: Date.now(),
         style: el.dataset.color,
         txys: [[0, e.x*dpr, e.y*dpr]]
       }
-      if (stroke.t0 == undefined) {
-        const strokes = slideStrokes.get(el.dataset.slideId) || []
-        stroke.t0 = Math.max(0, ...strokes.map(s => s.t0 + s.txys[s.txys.length-1][0]))
+      const strokes = slideStrokes.get(el.dataset.slideId)
+      if (strokes) stroke.t0 = Math.max(...strokes.map(s => s.t0 + s.txys[s.txys.length-1][0]))
+      if (slideKnobs.has(el.dataset.slideId)) {
+        const knob = slideKnob.get(el.dataset.slideId)
+        if (knob < strokes.length) {
+          const s = strokes[knob]
+          stroke.t0 = s.t0 + s.txys[0][0]
+        }
       }
       if (latest) stroke.t0 += Math.min(1000, stroke.begin - latest)
       latest = stroke.begin
@@ -513,16 +521,13 @@ Hooks.Canvas = {
       if (!slideStrokes.has(el.dataset.slideId)) slideStrokes.set(el.dataset.slideId, [])
       const strokes = slideStrokes.get(el.dataset.slideId)
       strokes.push(stroke)
-      const knob = slideKnob.get(el.dataset.slideId)
-      const maxSeek = Math.max(...strokes.map(s => s.t0 + s.txys[s.txys.length-1][0]))
-      let knobs = strokes.map(s => [s.t0 + s.txys[0][0], s.style])
-      for (let i = knobs.length-1; i > 0; i--) if (knobs[i][0] - knobs[i - 1][0] < 1000) knobs.splice(i, 1)
-      if (knob == undefined) {
-        this.pushEvent('seeked', {knob: maxSeek, knobs: knobs, max_seek: maxSeek})
-      } else {
-        const knob_ = stroke.t0 + stroke.txys[stroke.txys.length-1][0]
-        slideKnob.set(el.dataset.slideId, knob_)
-        this.pushEvent('seeked', {knob: knob_, knobs: knobs, max_seek: maxSeek})
+      strokes.sort((a, b) => a.t0 + a.txys[0][0] - b.t0 - b.txys[0][0])
+      const knobs = strokes.map((s, i) => [i, s.style])
+      for (let i = 0; ; i++) {
+        if (i < strokes.length && strokes[i].t0 + strokes[i].txys[0][0] <= stroke.t0 + stroke.txys[0][0]) continue
+        slideKnob.set(el.dataset.slideId, i)
+        this.pushEvent('seeked', {max_seek: strokes.length, knob: i, knobs: knobs})
+        break
       }
       staticRedraw()
     }
@@ -537,31 +542,28 @@ Hooks.Canvas = {
     this.handleEvent('terminate', () => {
       const strokes = slideStrokes.get(el.dataset.slideId)
       if (!strokes) return
+      if (!slideKnob.has(el.dataset.slideId)) return
       const knob = slideKnob.get(el.dataset.slideId)
-      if (knob == undefined) return
+      if (knob == strokes.length) return
       slideKnob.delete(el.dataset.slideId)
       if (knob == 0) {
         slideStrokes.delete(el.dataset.slideId)
         staticRedraw()
-        this.pushEvent('seeked', {knob: null, knobs: null, max_seek: null})
+        this.pushEvent('seeked', {max_seek: null, knob: null, knobs: null})
       } else {
-        for (let i = strokes.length-1; i >= 0; i--) {
-          const stroke = strokes[i]
-          if (knob < stroke.t0 + stroke.txys[0][0]) {
-            strokes.splice(i, 1)
-            continue
-          }
-          while (stroke.t0 + stroke.txys[stroke.txys.length-1][0] > knob) stroke.txys.pop()
-        }
+        strokes.splice(knob)
         staticRedraw()
-        const knobs = strokes.map(s => [s.t0 + s.txys[0][0], s.style])
-        for (let i = knobs.length-1; i > 0; i--) if (knobs[i][0] - knobs[i - 1][0] < 1000) knobs.splice(i, 1)
-        this.pushEvent('seeked', {knob: knob, knobs: knobs, max_seek: knob})
+        const knobs = strokes.map((s, i) => [i, s.style])
+                             .filter(([i, _]) => !i || strokes[i].t0 + strokes[i].txys[0][0] >= strokes[i-1].t0 + strokes[i-1].txys[0][0] + 1000)
+        this.pushEvent('seeked', {max_seek: strokes.length, knob: knob, knobs: knobs})
       }
     })
     this.handleEvent('play', ({knob}) => {
+      const strokes = slideStrokes.get(el.dataset.slideId)
+      if (!strokes) return
+
       const commands = []
-      for (const stroke of slideStrokes.get(el.dataset.slideId) || []) {
+      for (const stroke of strokes) {
         let prev = stroke.txys[0]
         let width = 0
         for (const [t,x,y] of stroke.txys.slice(1)) {
@@ -577,9 +579,13 @@ Hooks.Canvas = {
       const step = (t) => {
         if (i == commands.length) {
           i = 0
-          begin = t - knob
+          begin = t
+          if (knob) {
+            const s = strokes[knob-1]
+            begin -= s.t0 + s.txys[s.txys.length-1]
+          }
           staticCtx.clearRect(0, 0, el.width, el.height)
-          for (const stroke of slideStrokes.get(el.dataset.slideId) || []) {
+          for (const stroke of strokes) {
             staticCtx.strokeStyle = "oklch(70.7% 0.022 261.325)"
             staticCtx.fillStyle = "oklch(70.7% 0.022 261.325)"
             let prev = stroke.txys[0]
@@ -614,15 +620,13 @@ Hooks.Canvas = {
       playTimeout = requestAnimationFrame(step)
     })
     this.handleEvent('redraw', () => {
+      staticRedraw()
       const strokes = slideStrokes.get(el.dataset.slideId)
       if (!strokes) return
-      const maxSeek = Math.max(...strokes.map(s => s.t0 + s.txys[s.txys.length-1][0]))
-      let knob = slideKnob.get(el.dataset.slideId)
-      if (knob == undefined) knob = maxSeek
-      let knobs = strokes.map(s => [s.t0 + s.txys[0][0], s.style])
-      for (let i = knobs.length-1; i > 0; i--) if (knobs[i][0] - knobs[i - 1][0] < 1000) knobs.splice(i, 1)
-      staticRedraw()
-      this.pushEvent('seeked', {knob: knob, knobs: knobs, max_seek: maxSeek})
+      const knobs = strokes.map((s, i) => [i, s.style])
+      let knob = strokes.length
+      if (slideKnob.has(el.dataset.slideId)) knob = slideKnob.get(el.dataset.slideId)
+      this.pushEvent('seeked', {max_seek: strokes.length, knob: knob, knobs: knobs})
     })
   }
 }
