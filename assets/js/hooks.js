@@ -7,6 +7,7 @@ const getSize = (el) => {
   if (el.matches('.mkaps-sentence')) return parseInt(el.style.fontSize, 10)
   if (el.matches('.mkaps-image')) return parseInt(el.style.width, 10)
   if (el.matches('.mkaps-avatar')) return parseInt(el.style.width, 10)
+  if (el.matches('.mkaps-video')) return parseInt(el.style.width, 10)
 }
 
 const xyzSize = (el) => {
@@ -48,6 +49,7 @@ const setAllOrigins = (origins) => {
   for (const e of document.querySelectorAll('.mkaps-sentence')) es.push(e)
   for (const e of document.querySelectorAll('.mkaps-image')) es.push(e)
   for (const e of document.querySelectorAll('.mkaps-avatar')) es.push(e)
+  for (const e of document.querySelectorAll('.mkaps-video')) es.push(e)
   for (const e of es) origins.set(e, xyzSize(e))
 }
 
@@ -59,6 +61,7 @@ const persistent = (el) => {
   if (el.matches('.mkaps-toggle-images')) {
     events.push(...Array.from(document.querySelectorAll('.mkaps-image')).map(xyzSize))
     events.push(...Array.from(document.querySelectorAll('.mkaps-avatar')).map(xyzSize))
+    events.push(...Array.from(document.querySelectorAll('.mkaps-video')).map(xyzSize))
   }
   return events
 }
@@ -68,6 +71,48 @@ Hooks.Touchable = {
     const el = this.el
     let myTicker = 1
     let timeout = null
+
+    const parseStartEnd = (s) => {
+      if (!s) return [NaN, NaN]
+      return s.split('-').map((t) => {
+        if (!t) return NaN
+        const [min, sec] = t.split(':').map(Number)
+        return min * 60 + sec
+      })
+    }
+
+    if (el.matches('.mkaps-video')) {
+      const video = el.querySelector('video')
+      let [start, end] = parseStartEnd(el.dataset.startEnd)
+      if (isNaN(start)) start = 0
+      video.currentTime = start
+      if (!isNaN(end)) {
+        video.addEventListener('timeupdate', () => {
+          if (video.currentTime < end) return
+          video.pause()
+          setTimeout(() => {
+            if (!video.paused) return
+            video.currentTime = start
+            video.play()
+          }, 1000)
+        })
+      }
+      video.addEventListener('ended', () => {
+        setTimeout(() => {
+          if (!video.ended) return
+          video.currentTime = start
+          video.play()
+        }, 1000)
+      })
+
+      const showTime = () => {
+        const min = String(Math.floor(video.currentTime / 60)).padStart(2, '0')
+        const sec = String(Math.floor(video.currentTime % 60)).padStart(2, '0')
+        el.querySelector('div').textContent = `${min}:${sec}`
+      }
+      showTime()
+      video.addEventListener('timeupdate', showTime)
+    }
 
     if (el.matches('img')) {
       el.addEventListener('contextmenu', (e) => {
@@ -142,6 +187,14 @@ Hooks.Touchable = {
           this.pushEvent('focus', {
             avatar: el.id
           })
+        } else if (el.matches('.mkaps-video')) {
+          if (draggings.size > 0) this.pushEvent('drags', Array.from(draggings).map(xyzSize))
+          const video = el.querySelector('video')
+          if (video.paused) {
+            video.play()
+          } else {
+            video.pause()
+          }
         }
       } else if (pointers.length == 1) {
         // is State 2
@@ -211,6 +264,10 @@ Hooks.Touchable = {
             el.style.left = `${p.x - (p.originX - p.origins.get(el).x)}px`
             el.style.top = `${p.y - (p.originY - p.origins.get(el).y)}px`
           }
+          for (const el of document.querySelectorAll('.mkaps-video')) {
+            el.style.left = `${p.x - (p.originX - p.origins.get(el).x)}px`
+            el.style.top = `${p.y - (p.originY - p.origins.get(el).y)}px`
+          }
         }
         if (el.matches('.mkaps-toggle-strokes')) {
         }
@@ -253,6 +310,11 @@ Hooks.Touchable = {
             e.style.top = `${p.y - Math.round((p.originY - p.origins.get(e).y) * r)}px`
             e.style.width = `${Math.round(p.origins.get(e).size * r)}px`
           }
+          for (const e of document.querySelectorAll('.mkaps-video')) {
+            e.style.left = `${p.x - Math.round((p.originX - p.origins.get(e).x) * r)}px`
+            e.style.top = `${p.y - Math.round((p.originY - p.origins.get(e).y) * r)}px`
+            e.style.width = `${Math.round(p.origins.get(e).size * r)}px`
+          }
         }
         if (el.matches('.mkaps-toggle-strokes')) {
         }
@@ -264,7 +326,7 @@ Hooks.Touchable = {
           el.style.left = `${p.x - Math.round((p.originX - p.elX) * r)}px`
           el.style.top = `${p.y - Math.round((p.originY - p.elY) * r)}px`
           el.style.fontSize = `${Math.round(p.elSize * r)}px`
-        } else if (el.matches('.mkaps-image') || el.matches('.mkaps-avatar')) {
+        } else if (el.matches('.mkaps-image') || el.matches('.mkaps-avatar') || el.matches('.mkaps-video')) {
           const r = len1 / len0
           el.style.left = `${p.x - Math.round((p.originX - p.elX) * r)}px`
           el.style.top = `${p.y - Math.round((p.originY - p.elY) * r)}px`

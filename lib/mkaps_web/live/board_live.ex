@@ -21,7 +21,7 @@ defmodule MkapsWeb.BoardLive do
                              {"text-blue-500", "oklch(62.3% 0.214 259.815)"},
                              {"text-purple-500", "oklch(62.7% 0.265 303.9)"}])
      |> allow_upload(:image,
-                     accept: ~w(.jpg .jpeg .png .gif .webp .avif .svg),
+                     accept: ~w(.jpg .jpeg .png .gif .webp .avif .svg .mp4 .webm .mp3),
                      max_file_size: 1_000_000_000,
                      max_entries: 20,
                      auto_upload: true,
@@ -380,13 +380,24 @@ defmodule MkapsWeb.BoardLive do
   attr :image_frames, :map, required: true
   defp show_images(assigns) do
     ~H"""
-    <img :for={{image, i} <- Enum.with_index(String.split(@images, "\n", trim: true))}
-      :if={image != ""}
+    <%= for {image, i} <- Enum.with_index(String.split(@images, "\n", trim: true)) do %>
+    <div :if={Enum.any?(~w(.mp4 .webm), &String.ends_with?(Enum.at(String.split(image, " "), 0), &1))}
+      class="absolute h-auto mkaps-video mkaps-drag"
+      phx-hook="Touchable" id={"image-#{i}"}
+      data-start-end={Enum.at(String.split(image, " "), 1)}
+      style={get_image_style(@transforms, @auto_transforms, "image-#{i}")}>
+      <div>00:00</div>
+      <video class="shadow-sm/100 rounded-lg">
+        <source src={Enum.at(String.split(image, " "), 0)} />
+      </video>
+    </div>
+    <img :if={Enum.any?(~w(.jpg .jpeg .png .gif .webp .avif .svg), &String.ends_with?(Enum.at(String.split(image, " "), Map.get(@image_frames, "#{@slide_id}-#{i}", 0)), &1))}
       class="absolute h-auto shadow-sm/100 rounded-lg mkaps-image mkaps-drag"
       draggable="false"
       src={Enum.at(String.split(image, " "), Map.get(@image_frames, "#{@slide_id}-#{i}", 0))}
       phx-hook="Touchable" id={"image-#{i}"}
       style={get_image_style(@transforms, @auto_transforms, "image-#{i}")} />
+    <% end %>
     """
   end
 
@@ -1179,7 +1190,7 @@ defmodule MkapsWeb.BoardLive do
     |> File.ls!
     |> Enum.filter(fn file ->
       ext = file |> Path.extname |> String.downcase
-      ext in [".jpg", ".jpeg", ".png", ".gif", ".webp"]
+      ext in ~w(.jpg .jpeg .png .gif .webp .avif .svg .mp4 .webm .mp3)
     end)
     |> Enum.map(fn file ->
       path = Path.join(uploads_folder, file)
