@@ -111,7 +111,6 @@ defmodule MkapsWeb.BoardLive do
      |> assign(burger_right: false)
      |> assign(knob: nil)
      |> assign(knobs: nil)
-     |> assign(max_seek: nil)
      |> push_event("redraw", %{})}
   end
 
@@ -221,7 +220,7 @@ defmodule MkapsWeb.BoardLive do
       </ul>
     </div>
     <%= if length(@lessons) == 0 do %>
-    <.index_lesson change_key="first"
+    <.index_lesson change_key="first" has_slide={false} updated_at={nil}
       form={to_form(Lesson.changeset(%Lesson{position: 1}, Map.get(@lesson_changes, "first", %{})))} />
     <% end %>
     <%= for lesson <- @lessons do %>
@@ -446,7 +445,7 @@ defmodule MkapsWeb.BoardLive do
   attr :draw_colors, :list, required: true
   attr :stroke_width, :integer, required: true
   attr :knob, :integer, required: true
-  attr :max_seek, :integer, required: true
+  attr :knobs, :list, required: true
   defp show_draw(assigns) do
     ~H"""
     <div class="join tooltip tooltip-right pointer-events-auto" data-tip="啟用繪畫、復原、重做">
@@ -460,7 +459,7 @@ defmodule MkapsWeb.BoardLive do
         phx-click="choose-stroke-width" phx-value-width="140">中</button>
       <button :if={@stroke_width == 20} class="join-item btn btn-sm btn-outline kai"
         phx-click="choose-stroke-width" phx-value-width="80">幼</button>
-      <button class="join-item btn btn-sm btn-outline kai" phx-click="stroke-terminate" disabled={!@knob or @knob == @max_seek}>截</button>
+      <button class="join-item btn btn-sm btn-outline kai" phx-click="stroke-terminate" disabled={!@knob or @knob == length(@knobs)}>截</button>
       <% else %>
       <button class="join-item btn btn-sm btn-outline text-red-500" phx-click="choose-draw-color" phx-value-color="oklch(63.7% 0.237 25.331)">○</button>
       <% end %>
@@ -555,7 +554,6 @@ defmodule MkapsWeb.BoardLive do
   attr :focus_id, :string, default: nil
   attr :burger, :boolean, required: true
   attr :left, :boolean, required: true
-  attr :max_seek, :integer, required: true
   attr :knob, :integer, required: true
   attr :knobs, :list, required: true
   defp show_burger(assigns) do
@@ -566,19 +564,19 @@ defmodule MkapsWeb.BoardLive do
     <.show_toggle_background_gestures :if={@slide} toggle_scroll={@toggle_scroll} toggle_sentences={@toggle_sentences} toggle_images={@toggle_images} toggle_strokes={@toggle_strokes} />
     <div class="flex flex-col items-stretch">
       <div class={["flex", @left && "flex-row-reverse"]}>
-        <.show_draw draw_color={@draw_color} draw_colors={@draw_colors} stroke_width={@stroke_width} knob={@knob} max_seek={@max_seek} />
+        <.show_draw draw_color={@draw_color} draw_colors={@draw_colors} stroke_width={@stroke_width} knob={@knob} knobs={@knobs} />
         <.show_toggle_gestures toggle_pan={@toggle_pan} toggle_zoom={@toggle_zoom} toggle_rotate={@toggle_rotate} />
       </div>
       <%= if @draw_color && @knob do %>
       <form phx-change="seek">
-        <input name="knob" type="range" min="0" max={@max_seek} value={@knob} class="range range-info w-full pointer-events-auto" />
+        <input name="knob" type="range" min="0" max={length(@knobs)} value={@knob} class="range range-info w-full pointer-events-auto" />
       </form>
       <div class="pointer-events-auto">
-        <button :for={{[knob, oklch], i} <- Enum.with_index(@knobs)}
+        <button :for={{[t, oklch], i} <- Enum.with_index(@knobs)}
           class={["btn btn-xs btn-circle btn-outline align-top", i > 0 && "absolute",
             Enum.find_value(@draw_colors, fn {c, o} -> if o == oklch, do: c, else: nil end)]}
-          style={"left:#{100 * knob / @max_seek}%"}
-          phx-value-knob={knob}
+          style={"left:#{100 * i / (length(@knobs))}%"}
+          phx-value-knob={@knob}
           phx-click="play">{i+1}</button>
       </div>
       <% end %>
@@ -622,7 +620,6 @@ defmodule MkapsWeb.BoardLive do
   attr :focus_id, :string, default: nil
   attr :burger_left, :boolean, required: true
   attr :burger_right, :boolean, required: true
-  attr :max_seek, :integer, required: true
   attr :knob, :integer, required: true
   defp show_slide(assigns) do
     ~H"""
@@ -669,7 +666,7 @@ defmodule MkapsWeb.BoardLive do
         lesson={@lesson} slide={@slide} slide_position={@slide_position}
         focus_id={@focus_id}
         burger={@burger_right} left={false}
-        max_seek={@max_seek} knob={@knob} knobs={@knobs} />
+        knob={@knob} knobs={@knobs} />
     </div>
     <div class="fixed z-9999 bottom-0 left-0 flex flex-col items-start select-none pointer-events-none">
       <.show_burger toggle_scroll={@toggle_scroll} toggle_sentences={@toggle_sentences} toggle_images={@toggle_images} toggle_strokes={@toggle_strokes}
@@ -678,7 +675,7 @@ defmodule MkapsWeb.BoardLive do
         lesson={@lesson} slide={@slide} slide_position={@slide_position}
         focus_id={@focus_id}
         burger={@burger_left} left={true}
-        max_seek={@max_seek} knob={@knob} knobs={@knobs} />
+        knob={@knob} knobs={@knobs} />
     </div>
     """
   end
@@ -911,23 +908,19 @@ defmodule MkapsWeb.BoardLive do
     {:noreply, push_event(socket, "terminate", %{})}
   end
 
-  def handle_event("seeked", %{"knob" => knob, "knobs" => knobs, "max_seek" => max_seek}, socket) do
-    {:noreply, assign(socket, knob: knob, knobs: knobs, max_seek: max_seek)}
-  end
-
-  def handle_event("seeked", %{"knob" => knob}, socket) do
-    {:noreply, assign(socket, knob: knob)}
+  def handle_event("seeked", %{"knob" => knob, "knobs" => knobs}, socket) do
+    {:noreply, assign(socket, knob: knob, knobs: knobs)}
   end
 
   def handle_event("seek", %{"knob" => knob}, socket) do
     {:noreply,
      socket
-     |> assign(knob: knob)
+     |> assign(knob: String.to_integer(knob))
      |> push_event("seek", %{"knob" => String.to_integer(knob)})}
   end
 
   def handle_event("play", %{"knob" => knob}, socket) do
-    {:noreply, push_event(socket, "play", %{"knob" => knob})}
+    {:noreply, push_event(socket, "play", %{"knob" => String.to_integer(knob)})}
   end 
 
   def handle_event("toggle-burger", %{"left" => _}, socket) do
