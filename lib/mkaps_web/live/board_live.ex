@@ -391,7 +391,7 @@ defmodule MkapsWeb.BoardLive do
         <source src={Enum.at(String.split(image, " "), 0)} />
       </video>
     </div>
-    <img :if={Enum.any?(~w(.jpg .jpeg .png .gif .webp .avif .svg), &String.ends_with?(Enum.at(String.split(image, " "), Map.get(@image_frames, "#{@slide_id}-#{i}", 0)), &1))}
+    <img :if={not Enum.any?(~w(.mp4 .webm .mp3), &String.ends_with?(Enum.at(String.split(image, " "), 0), &1))}
       class="absolute h-auto shadow-sm/100 rounded-lg mkaps-image mkaps-drag"
       draggable="false"
       src={Enum.at(String.split(image, " "), Map.get(@image_frames, "#{@slide_id}-#{i}", 0))}
@@ -802,7 +802,7 @@ defmodule MkapsWeb.BoardLive do
       slide = Slide |> Repo.get!(String.to_integer(slide_id))
       Lesson |> Repo.get!(slide.lesson_id) |> Ecto.Changeset.change(updated_at: DateTime.utc_now() |> DateTime.truncate(:second)) |> Repo.update!
       Slide |> where([s], s.lesson_id == ^slide.lesson_id and s.position > ^slide.position) |> Repo.update_all(inc: [position: -1])
-      slide |> Repo.delete!
+      slide |> Repo.delete
     end)
     {:noreply,
      socket
