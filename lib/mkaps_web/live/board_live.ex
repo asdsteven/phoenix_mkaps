@@ -111,7 +111,8 @@ defmodule MkapsWeb.BoardLive do
      |> assign(burger_right: false)
      |> assign(knob: nil)
      |> assign(knobs: nil)
-     |> push_event("redraw", %{})}
+     |> push_event("redraw", %{})
+     |> push_event("reset_video", %{})}
   end
 
   def handle_params(_params, _uri, socket)
@@ -256,11 +257,12 @@ defmodule MkapsWeb.BoardLive do
       <button disabled={@form.source.changes != %{} or Enum.any?([:sentences, :images, :transforms], &(@form[&1].value && @form[&1].value != "")) or Map.get(@form[:avatars].value || %{}, "names", "") != ""}
         :if={@form[:id].value} class="btn btn-error" type="button" phx-click="delete-slide" phx-value-slide={@form[:id].value}>Delete</button>
       <div :if={@form[:id].value} class="join">
-        <button class="join-item btn btn-secondary" type="button" phx-click="move-slide" phx-value-slide={@form[:id].value}>Move</button>
+        <button class="join-item btn btn-secondary" type="button" phx-click="move-slide" phx-value-slide={@form[:id].value}
+          disabled={@form[:position].value == 1}>Move</button>
         <.link class="join-item btn btn-accent" patch={~p"/lessons/#{@form[:lesson_id].value}/slides/#{@form[:position].value}"}>Play</.link>
       </div>
       <div>
-        <img :for={image <- String.split(@form[:images].value || "", "\n", trim: true)}
+        <img :for={image <- String.split(@form[:images].value || "", "\n", trim: true)} :if={not Enum.any?(~w(.mp4 .webm .mp3), &String.ends_with?(Enum.at(String.split(image, " "), 0), &1))}
           class="h-24 w-auto inline m-1"
           src={Enum.at(String.split(image, " "), 0)} />
       </div>
@@ -742,14 +744,14 @@ defmodule MkapsWeb.BoardLive do
 
   def handle_event("change-slide", %{"change_key" => change_key, "slide" => %{"id" => _} = params}, socket) do
     avatars = Enum.find(socket.assigns.lesson.slides, &(&1.id == String.to_integer(params["id"]))).avatars
-    decode_params = params |> decode_transforms |> decode_avatars(avatars)
+    decode_params = params |> decode_transforms |> decode_avatars(avatars) |> Map.delete("position")
     {:noreply,
      socket
      |> update(:slide_changes, &Map.put(&1, change_key, decode_params))}
   end
 
   def handle_event("change-slide", %{"change_key" => change_key, "slide" => params}, socket) do
-    decode_params = params |> decode_transforms |> decode_avatars(nil)
+    decode_params = params |> decode_transforms |> decode_avatars(nil) |> Map.delete("position")
     {:noreply,
      socket
      |> update(:slide_changes, &Map.put(&1, change_key, decode_params))}

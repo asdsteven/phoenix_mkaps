@@ -66,41 +66,58 @@ const persistent = (el) => {
   return events
 }
 
+const parseStartEnd = (s) => {
+  if (!s) return [NaN, NaN]
+  return s.split('-').map((t) => {
+    if (!t) return NaN
+    const [min, sec] = t.split(':').map(Number)
+    return min * 60 + sec
+  })
+}
+
 Hooks.Touchable = {
   mounted() {
     const el = this.el
     let myTicker = 1
     let timeout = null
 
-    const parseStartEnd = (s) => {
-      if (!s) return [NaN, NaN]
-      return s.split('-').map((t) => {
-        if (!t) return NaN
-        const [min, sec] = t.split(':').map(Number)
-        return min * 60 + sec
-      })
-    }
-
     if (el.matches('.mkaps-video')) {
       const video = el.querySelector('video')
-      let [start, end] = parseStartEnd(el.dataset.startEnd)
-      if (isNaN(start)) start = 0
-      video.currentTime = start
-      if (!isNaN(end)) {
-        video.addEventListener('timeupdate', () => {
-          if (video.currentTime < end) return
-          video.pause()
-          setTimeout(() => {
-            if (!video.paused) return
-            video.currentTime = start
-            video.play()
-          }, 1000)
-        })
+      const [start, end] = parseStartEnd(el.dataset.startEnd)
+      if (isNaN(start)) {
+        video.currentTime = 0
+      } else {
+        video.currentTime = start
       }
+      video.addEventListener('timeupdate', () => {
+        const [start, end] = parseStartEnd(el.dataset.startEnd)
+        if (!isNaN(start) && video.currentTime < start) {
+          video.currentTime = start
+          return
+        }
+        if (isNaN(end)) return
+        if (video.currentTime < end) return
+        video.pause()
+        setTimeout(() => {
+          if (!video.paused) return
+          const [start, end] = parseStartEnd(el.dataset.startEnd)
+          if (isNaN(start)) {
+            video.currentTime = 0
+          } else {
+            video.currentTime = start
+          }
+          video.play()
+        }, 1000)
+      })
       video.addEventListener('ended', () => {
         setTimeout(() => {
           if (!video.ended) return
-          video.currentTime = start
+          const [start, end] = parseStartEnd(el.dataset.startEnd)
+          if (isNaN(start)) {
+            video.currentTime = 0
+          } else {
+            video.currentTime = start
+          }
           video.play()
         }, 1000)
       })
@@ -112,6 +129,16 @@ Hooks.Touchable = {
       }
       showTime()
       video.addEventListener('timeupdate', showTime)
+      this.handleEvent('reset_video', () => {
+        const [start, end] = parseStartEnd(el.dataset.startEnd)
+        if (isNaN(start)) {
+          video.currentTime = 0
+        } else {
+          video.currentTime = start
+        }
+        video.pause()
+        showTime()
+      })
     }
 
     if (el.matches('img')) {
