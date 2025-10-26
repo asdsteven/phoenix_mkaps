@@ -494,6 +494,7 @@ Hooks.Canvas = {
       return 0.7 * prevWidth + 0.3 * target
     }
 
+    const dpr = 3
     const drawStroke = (ctx, width, prev, [t, x, y]) => {
       if (x == prev[1] && y == prev[2]) {
         ctx.beginPath()
@@ -508,6 +509,7 @@ Hooks.Canvas = {
       }
     }
 
+    // [{t0,style,txys:[[t,x,y]]}]
     const slideStrokes = new Map()
     const slideKnob = new Map()
 
@@ -534,6 +536,7 @@ Hooks.Canvas = {
       let knob = knobs.length
       if (slideKnob.has(el.dataset.slideId)) knob = slideKnob.get(el.dataset.slideId)
       for (const stroke of strokes) {
+        if (stroke.style == 'erased') continue
         staticCtx.strokeStyle = stroke.style
         staticCtx.fillStyle = stroke.style
         let prev = stroke.txys[0]
@@ -548,8 +551,54 @@ Hooks.Canvas = {
           prev = [t,x,y]
         }
       }
+      for (const [x,y] of erasers.values()) {
+        staticCtx.fillStyle = '#ffffff'
+        staticCtx.beginPath()
+        staticCtx.arc(x, y, el.dataset.strokeWidth / 2, 0, 2 * Math.PI)
+        staticCtx.fill()
+      }
     }
 
+    const touchEraser = (px, py, x, y, ex, ey, width) => {
+      const r = (Number(el.dataset.strokeWidth) + width) / 2
+      const [ux, uy] = [px - x, py - y]
+      const [vx, vy] = [ex - x, ey - y]
+      const [wx, wy] = [ex - px, ey - py]
+      const uu = ux*ux + uy*uy
+      const vv = vx*vx + vy*vy
+      const ww = wx*wx + wy*wy
+      const cross = ux*vy - uy*vx
+
+      if (vv <= r*r || ww <= r*r) return true
+
+      if (uu && cross*cross > r*r * uu) return false
+      if (!uu && vv > r*r) return false
+
+      if (ux*vx + uy*vy < 0 || -ux*wx + -uy*wy < 0) return false
+
+      return true
+    }
+
+    const erase = (ex, ey) => {
+      const strokes = slideStrokes.get(el.dataset.slideId)
+      if (!strokes) return
+      for (const stroke of strokes) {
+        let prev = stroke.txys[0]
+        let width = 0
+        for (const [t,x,y] of stroke.txys.slice(1)) {
+          width = dynamicLineWidth(width, prev, [t,x,y])
+          if (touchEraser(prev[1], prev[2], x, y, ex, ey, width)) {
+            stroke.style = 'erased'
+            break
+          }
+          prev = [t,x,y]
+        }
+      }
+      if (strokes.length == 0) slideStrokes.delete(el.dataset.slideId)
+      staticRedraw()
+    }
+
+    const erasers = new Map()
     const drawingStrokes = new Map()
     const drawingStrokeWidths = new Map()
     const diffuseTimeouts = new Map()
@@ -571,9 +620,13 @@ Hooks.Canvas = {
       diffuseTimeouts.set(id, setTimeout(() => diffuse(id), 30))
     }
 
-    const dpr = 3
     el.addEventListener('pointerdown', (e) => {
       if (el.dataset.color === undefined) return
+      if (el.dataset.color == "eraser") {
+        erasers.set(e.pointerId, [e.x*dpr, e.y*dpr])
+        erase(e.x*dpr, e.y*dpr)
+        return
+      }
       const stroke = {
         t0: 0,
         begin: Date.now(),
@@ -599,6 +652,11 @@ Hooks.Canvas = {
       diffuseTimeouts.set(e.pointerId, setTimeout(() => diffuse(e.pointerId), 30))
     })
     window.addEventListener('pointermove', (e) => {
+      if (erasers.has(e.pointerId)) {
+        erasers.set(e.pointerId, [e.x*dpr, e.y*dpr])
+        erase(e.x*dpr, e.y*dpr)
+        return
+      }
       const stroke = drawingStrokes.get(e.pointerId)
       if (!stroke) return
       const prev = stroke.txys[stroke.txys.length-1]
@@ -612,6 +670,11 @@ Hooks.Canvas = {
       diffuseTimeouts.set(e.pointerId, setTimeout(() => diffuse(e.pointerId), 30))
     })
     const pointerend = (e) => {
+      if (erasers.has(e.pointerId)) {
+        erasers.delete(e.pointerId)
+        erase(e.x*dpr, e.y*dpr)
+        return
+      }
       const stroke = drawingStrokes.get(e.pointerId)
       if (!stroke) return
       drawingStrokes.delete(e.pointerId)
@@ -668,6 +731,7 @@ Hooks.Canvas = {
 
       const commands = []
       for (const stroke of strokes) {
+        if (stroke.style == 'erased') continue
         let prev = stroke.txys[0]
         let width = 0
         for (const [t,x,y] of stroke.txys.slice(1)) {
@@ -684,12 +748,10 @@ Hooks.Canvas = {
         if (i == commands.length) {
           i = 0
           begin = t
-          if (slideKnob.has(el.dataset.slideId)) {
-            const knob = slideKnob.get(el.dataset.slideId)
-            if (knob < knobs.length) begin -= knobs[knob][0]
-          }
+          if (knob < knobs.length) begin -= knobs[knob][0]
           staticCtx.clearRect(0, 0, el.width, el.height)
           for (const stroke of strokes) {
+            if (stroke.style == 'erased') continue
             staticCtx.strokeStyle = "oklch(70.7% 0.022 261.325)"
             staticCtx.fillStyle = "oklch(70.7% 0.022 261.325)"
             let prev = stroke.txys[0]
@@ -724,6 +786,7 @@ Hooks.Canvas = {
       playTimeout = requestAnimationFrame(step)
     })
     this.handleEvent('redraw', () => {
+      latestPointerEnd = null
       staticRedraw()
       const strokes = slideStrokes.get(el.dataset.slideId)
       if (!strokes) return

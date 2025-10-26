@@ -466,6 +466,8 @@ defmodule MkapsWeb.BoardLive do
       <button :for={{css, oklch} <- @draw_colors}
         class={["join-item btn btn-sm btn-outline", css]}
         phx-click="choose-draw-color" phx-value-color={oklch}>{if @draw_color == oklch, do: "●", else: "○"}</button>
+      <button class={["join-item btn btn-sm btn-outline kai", @draw_color == "eraser" && "btn-primary"]}
+        phx-click="choose-draw-color" phx-value-color="eraser">擦</button>
       <button :if={@stroke_width == 140} class="join-item btn btn-sm btn-outline kai"
         phx-click="choose-stroke-width" phx-value-width="20">粗</button>
       <button :if={@stroke_width == 80} class="join-item btn btn-sm btn-outline kai"
@@ -605,7 +607,7 @@ defmodule MkapsWeb.BoardLive do
     </div>
     <% end %>
     <%= if not @left do %>
-    <div class="pointer-events-auto">
+    <div class="pointer-events-auto" phx-window-keyup="left-right">
       <.link class="btn btn-circle btn-outline" patch={~p"/lessons/#{@lesson.id}/slides/#{@slide_position-1}"}>&lt;</.link>
       <.link class="btn btn-circle btn-outline" patch={~p"/lessons/#{@lesson.id}/slides/#{@slide_position+1}"}>&gt;</.link>
     </div>
@@ -819,6 +821,22 @@ defmodule MkapsWeb.BoardLive do
     {:noreply, socket}
   end
 
+  def handle_event("left-right", %{"key" => "ArrowLeft"}, socket) do
+    lesson_id = socket.assigns.lesson.id
+    position = socket.assigns.slide_position-1
+    {:noreply, push_patch(socket, to: ~p"/lessons/#{lesson_id}/slides/#{position}")}
+  end
+
+  def handle_event("left-right", %{"key" => "ArrowRight"}, socket) do
+    lesson_id = socket.assigns.lesson.id
+    position = socket.assigns.slide_position+1
+    {:noreply, push_patch(socket, to: ~p"/lessons/#{lesson_id}/slides/#{position}")}    
+  end
+
+  def handle_event("left-right", _params, socket) do
+    {:noreply, socket}
+  end
+
   def handle_event("toggle-scroll", _params, socket) do
     scroll = not socket.assigns.toggle_scroll
     sentences = not scroll and socket.assigns.toggle_sentences
@@ -914,7 +932,10 @@ defmodule MkapsWeb.BoardLive do
   end
 
   def handle_event("choose-stroke-width", %{"width" => width}, socket) do
-    {:noreply, assign(socket, stroke_width: String.to_integer(width))}
+    {:noreply,
+     socket
+     |> assign(stroke_width: String.to_integer(width))
+     |> push_event("redraw", %{})}
   end
 
   def handle_event("stroke-terminate", _params, socket) do
