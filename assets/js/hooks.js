@@ -519,7 +519,10 @@ Hooks.Canvas = {
     const strokesToKnobs = (strokes) => {
       const m = new Map()
       let max = null
-      for (const stroke of strokes) m.set(stroke.t0 + stroke.txys[0][0], stroke.style)
+      for (const stroke of strokes) {
+        if (stroke.style == 'erased') continue
+        m.set(stroke.t0 + stroke.txys[0][0], stroke.style)
+      }
       const knobs = Array.from(m)
       knobs.sort(([t0, s0], [t1, s1]) => t0 - t1)
       return knobs
@@ -595,6 +598,9 @@ Hooks.Canvas = {
         }
       }
       if (strokes.length == 0) slideStrokes.delete(el.dataset.slideId)
+      const knobs = strokesToKnobs(strokes)
+      slideKnob.delete(el.dataset.slideId)
+      this.pushEvent('seeked', {knob: knobs.length, knobs: knobs})
       staticRedraw()
     }
 
