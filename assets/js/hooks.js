@@ -873,4 +873,146 @@ Hooks.Experiment = {
   }
 }
 
+Hooks.Pad = {
+  mounted() {
+    const el = this.el
+    const ctx = el.getContext('2d')
+    ctx.lineCap = 'round'
+
+    const dpr = 2
+    const drawStroke = (ctx, width, prev, [t, x, y]) => {
+      if (x == prev[1] && y == prev[2]) {
+        ctx.beginPath()
+        ctx.arc(x, y, width / 2, 0, 2 * Math.PI)
+        ctx.fill()
+      } else {
+        ctx.lineWidth = width
+        ctx.beginPath()
+        ctx.moveTo(prev[1], prev[2])
+        ctx.lineTo(x, y)
+        ctx.stroke()
+      }
+    }
+
+    let activeId = null
+    const strokes = []
+    let stroke = null
+
+    const colors = [
+      "oklch(63.7% 0.237 25.331)",
+      "oklch(75% 0.183 55.934)",
+      "oklch(90.5% 0.182 98.111)",
+      "oklch(72.3% 0.219 149.579)",
+      "oklch(62.3% 0.214 259.815)",
+      "oklch(62.7% 0.265 303.9)"
+    ]
+
+    el.addEventListener('pointerdown', (e) => {
+      if (activeId) return
+      activeId = e.pointerId
+      const rect = el.getBoundingClientRect()
+      console.log(`${e.y} ${rect.top}`)
+      stroke = {
+        t0: 0,
+        begin: Date.now(),
+        style: colors[strokes.length % colors.length],
+        txys: [[0, (e.x - rect.left)*dpr, (e.y - rect.top)*dpr]]
+      }
+    })
+    window.addEventListener('pointermove', (e) => {
+      if (activeId != e.pointerId) return
+      const rect = el.getBoundingClientRect()
+      const prev = stroke.txys[stroke.txys.length-1]
+      const curr = [Date.now() - stroke.begin, (e.x - rect.left)*dpr, (e.y - rect.top)*dpr]
+      stroke.txys.push(curr)
+      ctx.fillStyle = stroke.style
+      ctx.strokeStyle = stroke.style
+      drawStroke(ctx, 30, prev, curr)
+    })
+    const pointerend = (e) => {
+      if (activeId != e.pointerId) return
+      const rect = el.getBoundingClientRect()
+      stroke.txys.push([Date.now() - stroke.begin, (e.x - rect.left)*dpr, (e.y - rect.top)*dpr])
+      delete stroke.begin
+      strokes.push(stroke)
+      stroke = null
+      activeId = null
+    }
+    window.addEventListener('pointerup', pointerend)
+    window.addEventListener('pointercancel', pointerend)
+
+    this.handleEvent('clear', () => {
+      ctx.clearRect(0, 0, el.width, el.height)
+      strokes.splice(0)
+    })
+    this.handleEvent('request_submit', () => {
+      this.pushEvent('submit', strokes)
+    })
+
+    this.pushEvent('init')
+    this.handleEvent('init', (saved) => {
+      strokes.splice(0, Infinity, ...saved.list)
+      ctx.clearRect(0, 0, el.width, el.height)
+      for (const stroke of strokes) {
+        ctx.fillStyle = stroke.style
+        ctx.strokeStyle = stroke.style
+        let prev = stroke.txys[0]
+        for (const [t,x,y] of stroke.txys.slice(1)) {
+          drawStroke(ctx, 30, prev, [t,x,y])
+          prev = [t,x,y]
+        }
+      }
+    })
+  }
+}
+
+Hooks.SmallPad = {
+  mounted() {
+    const el = this.el
+    const ctx = el.getContext('2d')
+    ctx.lineCap = 'round'
+
+    const dpr = 2
+    const drawStroke = (ctx, width, prev, [t, x, y]) => {
+      if (x == prev[1] && y == prev[2]) {
+        ctx.beginPath()
+        ctx.arc(x, y, width / 2, 0, 2 * Math.PI)
+        ctx.fill()
+      } else {
+        ctx.lineWidth = width
+        ctx.beginPath()
+        ctx.moveTo(prev[1], prev[2])
+        ctx.lineTo(x, y)
+        ctx.stroke()
+      }
+    }
+
+    const colors = [
+      "oklch(63.7% 0.237 25.331)",
+      "oklch(75% 0.183 55.934)",
+      "oklch(90.5% 0.182 98.111)",
+      "oklch(72.3% 0.219 149.579)",
+      "oklch(62.3% 0.214 259.815)",
+      "oklch(62.7% 0.265 303.9)"
+    ]
+
+    this.pushEvent('smallpad-init', {
+      id: el.dataset.id
+    })
+    this.handleEvent('draw', (pad) => {
+      if (pad.id != el.dataset.id) return
+      ctx.clearRect(0, 0, el.width, el.height)
+      for (const stroke of pad.strokes.list) {
+        ctx.fillStyle = stroke.style
+        ctx.strokeStyle = stroke.style
+        let prev = stroke.txys[0]
+        for (const [t,x,y] of stroke.txys.slice(1)) {
+          drawStroke(ctx, 30, prev, [t,x,y])
+          prev = [t,x,y]
+        }
+      }
+    })
+  }
+}
+
 export default Hooks

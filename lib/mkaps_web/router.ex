@@ -27,6 +27,11 @@ defmodule MkapsWeb.Router do
     live "/lessons/:lesson_id/edit", BoardLive, :edit
     live "/lessons/:lesson_id/slides/:slide_position", BoardLive, :show
     live "/images", BoardLive, :images
+    live "/games", GameLive, :index
+    live "/games/:game_id", GameLive, :show
+    live "/games/:game_id/edit", GameLive, :edit
+    live "/games/:game_id/pads", GameLive, :index_pads
+    live "/games/:game_id/pads/:pad_id", GameLive, :show_pad
   end
 
   # Other scopes may use custom stacks.

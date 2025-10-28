@@ -1159,8 +1159,8 @@ defmodule MkapsWeb.BoardLive do
 
   defp decode_transforms(params) do
     case Map.get(params, "transforms", "") do
-      "" -> %{params | "transforms" => nil}
-      "{}" -> %{params | "transforms" => nil}
+      "" -> Map.put(params, "transforms", nil)
+      "{}" -> Map.put(params, "transforms", nil)
       transforms ->
         case Jason.decode(transforms) do
           {:ok, decode} -> %{params | "transforms" => decode}
