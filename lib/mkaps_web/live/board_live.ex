@@ -20,6 +20,7 @@ defmodule MkapsWeb.BoardLive do
                              {"text-green-500", "oklch(72.3% 0.219 149.579)"},
                              {"text-blue-500", "oklch(62.3% 0.214 259.815)"},
                              {"text-purple-500", "oklch(62.7% 0.265 303.9)"}])
+     |> assign(background_white: false)
      |> allow_upload(:image,
                      accept: ~w(.jpg .jpeg .png .gif .webp .avif .svg .mp4 .webm .mp3),
                      max_file_size: 1_000_000_000,
@@ -571,9 +572,13 @@ defmodule MkapsWeb.BoardLive do
   attr :left, :boolean, required: true
   attr :knob, :integer, required: true
   attr :knobs, :list, required: true
+  attr :background_white, :boolean, required: true
   defp show_burger(assigns) do
     ~H"""
     <%= if @burger do %>
+    <div class="pointer-events-auto flex">
+      <button class="btn btn-sm btn-outline kai" phx-click="toggle-background-white">白</button>
+    </div>
     <.show_avatar_ui :if={@slide && String.starts_with?(@focus_id || "", "avatar-")} avatars={@slide.avatars} focus_id={@focus_id} />
     <.show_save_transforms :if={@slide && @slide.transforms} transforms_state={@transforms_state} transforms={@slide.transforms} />
     <.show_toggle_background_gestures :if={@slide} toggle_scroll={@toggle_scroll} toggle_sentences={@toggle_sentences} toggle_images={@toggle_images} toggle_strokes={@toggle_strokes} />
@@ -636,10 +641,11 @@ defmodule MkapsWeb.BoardLive do
   attr :burger_left, :boolean, required: true
   attr :burger_right, :boolean, required: true
   attr :knob, :integer, required: true
+  attr :background_white, :boolean, required: true
   defp show_slide(assigns) do
     ~H"""
     <div id="idle-check" phx-hook="IdleDisconnect"></div>
-    <div class={["w-[1280px] h-[720px] bg-[url(/images/background1.jpg)] bg-cover bg-center relative overflow-hidden select-none",
+    <div class={["w-[1280px] h-[720px] bg-cover bg-center relative overflow-hidden select-none",
       @toggle_scroll && "mkaps-toggle-scroll",
       @toggle_sentences && "mkaps-toggle-sentences",
       @toggle_images && "mkaps-toggle-images",
@@ -647,9 +653,11 @@ defmodule MkapsWeb.BoardLive do
       @toggle_pan && "mkaps-toggle-pan",
       @toggle_zoom && "mkaps-toggle-zoom",
       @toggle_rotate && "mkaps-toggle-rotate",
-      not @toggle_scroll && "touch-none"]}
+      not @toggle_scroll && "touch-none",
+      not @background_white && "bg-[url(/images/background1.jpg)]",
+      @background_white && "bg-white"]}
       phx-hook="Touchable" id="board">
-      <div class="absolute size-full bg-zinc-800/90"></div>
+      <div :if={not @background_white} class="absolute size-full bg-zinc-800/90"></div>
       <canvas class="absolute size-full z-9999 pointer-events-none"
         id="static-canvas" width="3840" height="2160" style="image-rendering:pixelated"></canvas>
       <canvas class={["absolute size-full z-9999", !@draw_color && "pointer-events-none"]}
@@ -681,7 +689,8 @@ defmodule MkapsWeb.BoardLive do
         lesson={@lesson} slide={@slide} slide_position={@slide_position}
         focus_id={@focus_id}
         burger={@burger_right} left={false}
-        knob={@knob} knobs={@knobs} />
+        knob={@knob} knobs={@knobs}
+        background_white={@background_white} />
     </div>
     <div class="fixed z-9999 bottom-0 left-0 flex flex-col items-start select-none pointer-events-none">
       <.show_burger toggle_scroll={@toggle_scroll} toggle_sentences={@toggle_sentences} toggle_images={@toggle_images} toggle_strokes={@toggle_strokes}
@@ -690,7 +699,8 @@ defmodule MkapsWeb.BoardLive do
         lesson={@lesson} slide={@slide} slide_position={@slide_position}
         focus_id={@focus_id}
         burger={@burger_left} left={true}
-        knob={@knob} knobs={@knobs} />
+        knob={@knob} knobs={@knobs}
+        background_white={@background_white} />
     </div>
     """
   end
@@ -955,7 +965,7 @@ defmodule MkapsWeb.BoardLive do
 
   def handle_event("play", %{"knob" => knob}, socket) do
     {:noreply, push_event(socket, "play", %{"knob" => String.to_integer(knob)})}
-  end 
+  end
 
   def handle_event("toggle-burger", %{"left" => _}, socket) do
     burger_left = not socket.assigns.burger_left
@@ -967,6 +977,10 @@ defmodule MkapsWeb.BoardLive do
     burger_right = not socket.assigns.burger_right
     burger_left = not burger_right and socket.assigns.burger_left
     {:noreply, assign(socket, burger_left: burger_left, burger_right: burger_right)}
+  end
+
+  def handle_event("toggle-background-white", _params, socket) do
+    {:noreply, update(socket, :background_white, &(not &1))}
   end
 
   def handle_event("save-transforms", %{"slot" => slot}, socket) do

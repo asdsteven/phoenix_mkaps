@@ -56,11 +56,12 @@ defmodule MkapsWeb.GameLive do
   def handle_params(%{"game_id" => game_id, "pad_id" => pad_id}, _uri, socket)
       when socket.assigns.live_action == :show_pad do
     Phoenix.PubSub.subscribe(Mkaps.PubSub, "game-question:#{game_id}")
+    game = Game |> preload(:pads) |> Repo.get!(String.to_integer(game_id))
     {:noreply,
      socket
-     |> assign(game: Game |> preload(:pads) |> Repo.get!(String.to_integer(game_id)))
+     |> assign(game: game)
      |> assign(pad: Pad |> Repo.get!(String.to_integer(pad_id)))
-     |> assign(question: "我")}
+     |> assign(question: Map.get(game.data, "question"))}
   end
 
   def render(assigns) do
